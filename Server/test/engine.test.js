@@ -171,6 +171,30 @@ test('timeouts: autoMove always ends the turn', () => {
   }
 });
 
+test('a forgotten UNO that nobody catches costs nothing', () => {
+  const g = scenario({ hands: [[id(RED, 1), id(RED, 2)], [id(BLUE, 3), id(BLUE, 4)]], top: id(RED, 5) });
+  g.play(0, id(RED, 1), -1, false, true);
+  assert.strictEqual(g.hands[0].length, 1);
+  assert.ok(!g.takeEvents().some(e => e.k === 'unoPen'));
+});
+
+test('every bot level only makes legal moves', () => {
+  for (let level = 0; level <= 2; level++) {
+    for (let seed = 1; seed <= 600; seed++) {
+      const g = new Game({ seed: seed * 31 + level, stacking: true });
+      g.start();
+      let steps = 0;
+      while (!g.over) {
+        const p = g.turn;
+        const err = applyMove(g, p, chooseMove(g, p, level));
+        assert.strictEqual(err, null, `level ${level} seed ${seed}: ${err}`);
+        checkConservation(g);
+        if (++steps > 5000) assert.fail(`level ${level} seed ${seed}: game did not finish`);
+      }
+    }
+  }
+});
+
 test('3000 bot games finish with all invariants holding', () => {
   let totalTurns = 0, longest = 0;
   for (let seed = 1; seed <= 3000; seed++) {

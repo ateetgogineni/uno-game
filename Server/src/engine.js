@@ -136,7 +136,8 @@ class Game {
     this.emit({ k: 'reshuffle', n: rest.length });
   }
 
-  play(p, id, chosen, uno) {
+  // forgive: the player forgot UNO but nobody caught it (bot opponents don't always notice).
+  play(p, id, chosen, uno, forgive) {
     if (this.over) return 'game over';
     if (p !== this.turn) return 'not your turn';
     const hand = this.hands[p];
@@ -156,7 +157,7 @@ class Game {
 
     if (hand.length === 1) {
       if (uno) this.emit({ k: 'uno', p });
-      else {
+      else if (!forgive) {
         const got = this.drawCards(p, 2);
         this.emit({ k: 'unoPen', p, n: got.length, cards: got });
       }

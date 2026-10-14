@@ -1,7 +1,7 @@
 ﻿'use strict';
 const crypto = require('crypto');
 const { Game, cardOf, DRAW2, WILD4 } = require('./engine');
-const { chooseMove, applyMove } = require('./bot');
+const { chooseMove, applyMove, clampLevel, CATCH_CHANCE } = require('./bot');
 
 // Emote ids shared with the client (EmoteId in C#).
 const EMOTE = { HAPPY: 0, LAUGH: 1, COOL: 2, WOW: 3, ANGRY: 4, SAD: 5 };
@@ -92,7 +92,7 @@ class Match {
       else if (ev.k === 'play') ms += 450;
       else if (ev.k === 'reshuffle') ms += 600;
     }
-    return ms;
+    return ms * (this.cfg.animScale === undefined ? 1 : this.cfg.animScale);
   }
 
   armTimers(events) {
@@ -130,7 +130,7 @@ class Match {
     if (this.state !== 'playing') return;
     const p = this.game.turn;
     if (!this.seats[p].bot) return;
-    const err = applyMove(this.game, p, chooseMove(this.game, p));
+    const err = applyMove(this.game, p, chooseMove(this.game, p, this.seats[p].level));
     if (err) this.game.autoMove(p);
     this.flush();
   }
@@ -140,7 +140,9 @@ class Match {
     let err;
     if (msg.t === 'play') {
       const color = Number.isInteger(msg.color) ? msg.color : -1;
-      err = this.game.play(seat, msg.card | 0, color, !!msg.uno);
+      const opp = this.seats[(seat + 1) % this.seats.length];
+      const forgive = !msg.uno && opp.bot && Math.random() >= CATCH_CHANCE[clampLevel(opp.level)];
+      err = this.game.play(seat, msg.card | 0, color, !!msg.uno, forgive);
     } else if (msg.t === 'draw') err = this.game.draw(seat);
     else if (msg.t === 'pass') err = this.game.pass(seat);
     else return;
@@ -200,7 +202,8 @@ class Match {
   replaceWithBot(seat) {
     const s = this.seats[seat];
     this.detach(seat);
-    const bot = this.lobby.makeBot(this.seats.filter((x, i) => i !== seat).map(x => x.avatar));
+    const human = this.seats.find((x, i) => i !== seat && x.session);
+    const bot = this.lobby.makeBot(this.seats.filter((x, i) => i !== seat).map(x => x.avatar), human ? human.session.botLevel : undefined);
     this.seats[seat] = Object.assign(s, bot, { connected: false, ready: true });
     // Tell the other players who they are playing now.
     this.seats.forEach((x, i) => { if (i !== seat && x.session) this.sendTo(i, { t: 'matched', match: this.id, seat: i, players: this.playersInfo() }); });

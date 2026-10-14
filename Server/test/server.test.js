@@ -8,6 +8,7 @@ const { cardOf, DRAW2, WILD, WILD4 } = require('../src/engine');
 const FAST = {
   botAfterMs: 300, botJitterMs: 100, turnMs: 3000, offlineTurnMs: 500, readyTimeoutMs: 3000,
   reconnectGraceMs: 800, botThinkMs: 10, botThinkJitterMs: 10, latencyGraceMs: 50,
+  animScale: 0, // don't wait for client animations in tests
 };
 
 async function startServer(over = {}) {

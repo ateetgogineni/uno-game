@@ -1,5 +1,6 @@
 'use strict';
 const { Match } = require('./match');
+const { clampLevel, LEVEL } = require('./bot');
 
 const PROTOCOL = 1;
 const AVATAR_COUNT = 12;
@@ -56,7 +57,7 @@ class Lobby {
     const m = s.match;
     switch (msg.t) {
       case 'hello': this.hello(s, msg); break;
-      case 'find': this.find(s); break;
+      case 'find': s.botLevel = Number.isInteger(msg.lvl) ? clampLevel(msg.lvl) : LEVEL.NORMAL; this.find(s); break;
       case 'cancel': this.dequeue(s); break;
       case 'ready': if (m) m.ready(s.seat); break;
       case 'sync': if (m) m.sendSync(s.seat); break;
@@ -96,7 +97,7 @@ class Lobby {
     s.botTimer = setTimeout(() => {
       if (!this.queue.includes(s)) return;
       this.dequeue(s);
-      this.createMatch([this.humanSeat(s), this.makeBot([s.avatar])]);
+      this.createMatch([this.humanSeat(s), this.makeBot([s.avatar], s.botLevel)]);
     }, wait);
   }
 
@@ -111,11 +112,11 @@ class Lobby {
     return { name: s.name, avatar: s.avatar, pid: s.pid, bot: false, session: s };
   }
 
-  makeBot(takenAvatars) {
+  makeBot(takenAvatars, level = LEVEL.NORMAL) {
     let avatar;
     do { avatar = Math.floor(Math.random() * AVATAR_COUNT); } while (takenAvatars.includes(avatar));
     const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
-    return { name, avatar, pid: '', bot: true, session: null };
+    return { name, avatar, pid: '', bot: true, session: null, level: clampLevel(level) };
   }
 
   createMatch(seats) {

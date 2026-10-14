@@ -8,12 +8,13 @@ const { chooseMove, applyMove } = require('../src/bot');
 const lines = [];
 for (let seed = 1; seed <= 500; seed++) {
   const g = new Game({ players: 2, seed, stacking: seed % 3 !== 0 });
+  const level = Math.floor(seed / 7) % 3; // covers easy, normal and hard bots
   g.start();
   const moves = [];
   let guard = 0;
   while (!g.over && guard++ < 5000) {
     const p = g.turn;
-    const m = chooseMove(g, p);
+    const m = chooseMove(g, p, level);
     const err = applyMove(g, p, m);
     if (err) { moves.push('ERR'); break; }
     moves.push(m.type === 'play' ? `${p}p${m.card}c${m.color}${m.uno ? 'u' : ''}` : `${p}${m.type[0]}`);
