@@ -7,6 +7,16 @@ namespace UnoGame.Core
     {
         public enum MoveType { Play, Draw, Pass }
 
+        // Difficulty: new players get Easy, then it adapts to their recent results (Profile.BotLevel).
+        public const int Easy = 0, Normal = 1, Hard = 2;
+
+        // Per level: chance to pass a +2/+4 stack on, chance to call UNO, and chance to catch a player
+        // who forgot to call UNO (applied by the session, not here).
+        static readonly double[] StackChance = { 0.35, 0.7, 1 };
+        static readonly double[] UnoChance = { 0.6, 0.85, 0.92 };
+        public static readonly float[] CatchChance = { 0.25f, 0.7f, 1f };
+        const double EasyDrawChance = 0.2, EasyPassChance = 0.4, NormalRandomChance = 0.25;
+
         public struct Move
         {
             public MoveType Type;
@@ -14,6 +24,8 @@ namespace UnoGame.Core
             public int Color;
             public bool Uno;
         }
+
+        public static int ClampLevel(int level) => level < Easy || level > Hard ? Hard : level;
 
         /// <summary>Colour the bot holds most of (ignoring except); ties go to the lowest colour index.</summary>
         public static int BestColor(UnoEngine g, List<int> hand, int except)
@@ -43,17 +55,40 @@ namespace UnoGame.Core
             return 10 + v * 0.5 + sameColor * 1.5;
         }
 
-        public static Move Choose(UnoEngine g, int p)
+        static Move Simple(MoveType t) => new Move { Type = t, Card = -1, Color = -1 };
+
+        public static Move Choose(UnoEngine g, int p, int level = Hard)
         {
+            level = ClampLevel(level);
             var hand = g.Hands[p];
             var legal = g.LegalMoves(p);
-            if (legal.Count == 0) return new Move { Type = g.HasDrawn ? MoveType.Pass : MoveType.Draw, Card = -1, Color = -1 };
+            if (legal.Count == 0) return Simple(g.HasDrawn ? MoveType.Pass : MoveType.Draw);
+
+            if (level == Easy)
+            {
+                if (g.HasDrawn)
+                {
+                    if (g.Rng.Next() < EasyPassChance) return Simple(MoveType.Pass);
+                }
+                else if (g.Pending == 0 && g.Rng.Next() < EasyDrawChance) return Simple(MoveType.Draw);
+            }
 
             int pick = -1;
             if (g.Pending > 0)
             {
+                if (StackChance[level] < 1 && g.Rng.Next() >= StackChance[level]) return Simple(MoveType.Draw);
                 foreach (int id in legal) if (Cards.ValueOf(id) == Cards.Draw2) { pick = id; break; }
                 if (pick < 0) pick = legal[0];
+            }
+            else if (level == Easy)
+            {
+                var plain = legal.FindAll(id => Cards.ValueOf(id) <= 9);
+                var pool = plain.Count > 0 && g.Rng.Next() < 0.75 ? plain : legal;
+                pick = pool[g.RandInt(pool.Count)];
+            }
+            else if (level == Normal && g.Rng.Next() < NormalRandomChance)
+            {
+                pick = legal[g.RandInt(legal.Count)];
             }
             else
             {
@@ -66,8 +101,10 @@ namespace UnoGame.Core
                 }
             }
 
-            int color = Cards.IsWild(pick) ? BestColor(g, hand, pick) : -1;
-            bool uno = hand.Count == 2 && g.Rng.Next() < 0.92;
+            int color = -1;
+            if (Cards.IsWild(pick))
+                color = level == Easy && g.Rng.Next() < 0.5 ? g.RandInt(4) : BestColor(g, hand, pick);
+            bool uno = hand.Count == 2 && g.Rng.Next() < UnoChance[level];
             return new Move { Type = MoveType.Play, Card = pick, Color = color, Uno = uno };
         }
 

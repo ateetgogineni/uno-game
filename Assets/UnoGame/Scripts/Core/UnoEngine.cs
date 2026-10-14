@@ -166,7 +166,8 @@ namespace UnoGame.Core
             return ev;
         }
 
-        public string Play(int p, int id, int chosen, bool uno)
+        /// <param name="forgive">The player forgot UNO but nobody caught it (bot opponents don't always notice).</param>
+        public string Play(int p, int id, int chosen, bool uno, bool forgive = false)
         {
             if (Over) return "game over";
             if (p != Turn) return "not your turn";
@@ -191,7 +192,7 @@ namespace UnoGame.Core
             if (hand.Count == 1)
             {
                 if (uno) Emit(Ev.Of("uno", p));
-                else
+                else if (!forgive)
                 {
                     var got = DrawCards(p, 2);
                     var pen = Ev.Of("unoPen", p);

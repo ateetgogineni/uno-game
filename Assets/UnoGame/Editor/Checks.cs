@@ -21,13 +21,14 @@ namespace UnoGame.EditorTools
             for (int seed = 1; seed <= 500; seed++)
             {
                 var g = new UnoEngine(2, seed, seed % 3 != 0);
+                int level = (seed / 7) % 3; // covers easy, normal and hard bots
                 g.Start();
                 var moves = new List<string>();
                 int guard = 0;
                 while (!g.Over && guard++ < 5000)
                 {
                     int p = g.Turn;
-                    var m = UnoBot.Choose(g, p);
+                    var m = UnoBot.Choose(g, p, level);
                     string err = UnoBot.Apply(g, p, m);
                     if (err != null) { moves.Add("ERR"); break; }
                     if (m.Type == UnoBot.MoveType.Play) moves.Add($"{p}p{m.Card}c{m.Color}{(m.Uno ? "u" : "")}");
