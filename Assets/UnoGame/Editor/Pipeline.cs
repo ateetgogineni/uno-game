@@ -20,8 +20,8 @@ namespace UnoGame.EditorTools
     {
         public const string Product = "UNO Game";
         public const string PackageId = "com.unogame.game";
-        public const string Version = "1.0.0";
-        public const int VersionCode = 1;
+        public const string Version = "1.0.1";
+        public const int VersionCode = 2;
 
         const string FontTtf = "Assets/UnoGame/Fonts/Inter-SemiBold.ttf";
         const string FontAsset = "Assets/UnoGame/Resources/Fonts/Inter SDF.asset";
