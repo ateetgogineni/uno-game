@@ -153,6 +153,56 @@ namespace UnoGame.UI
             return g;
         }
 
+        /// <summary>Top-to-bottom colour gradient on a label (titles, badges).</summary>
+        public static TextMeshProUGUI Gradient(this TextMeshProUGUI t, Color top, Color bottom)
+        {
+            t.enableVertexGradient = true;
+            t.colorGradient = new VertexGradient(top, top, bottom, bottom);
+            t.color = Color.white;
+            return t;
+        }
+
+        /// <summary>
+        /// A pill "chip": dark translucent rounded background with a faint border, auto-sized around its
+        /// children (laid out left to right). Returns the content row to add icons/labels to.
+        /// </summary>
+        public static RectTransform Chip(Transform parent, string name, float height, Color? fill = null, float padding = 30f, float spacing = 14f)
+        {
+            var root = Node(name, parent);
+            root.sizeDelta = new Vector2(200, height);
+            var border = Img(root, "Border", S("rounded"), new Color(1, 1, 1, 0.16f));
+            border.rectTransform.Fill(-3, -3, -3, -3);
+            border.pixelsPerUnitMultiplier = 128f / height;
+            border.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            var bg = Img(root, "Fill", S("rounded"), fill ?? new Color(0.05f, 0.03f, 0.12f, 0.62f));
+            bg.rectTransform.Fill();
+            bg.pixelsPerUnitMultiplier = 128f / height;
+            bg.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            var row = root.gameObject.AddComponent<HorizontalLayoutGroup>();
+            row.padding = new RectOffset((int)padding, (int)padding, 0, 0);
+            row.spacing = spacing;
+            row.childAlignment = TextAnchor.MiddleCenter;
+            row.childControlWidth = true;
+            row.childControlHeight = false;
+            row.childForceExpandWidth = false;
+            row.childForceExpandHeight = false;
+            var fit = root.gameObject.AddComponent<ContentSizeFitter>();
+            fit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            return root;
+        }
+
+        /// <summary>Fixed-size icon inside a layout row.</summary>
+        public static Image LayoutIcon(Transform row, string name, Sprite sprite, float size, Color? color = null)
+        {
+            var img = Img(row, name, sprite, color);
+            img.type = Image.Type.Simple;
+            img.rectTransform.sizeDelta = new Vector2(size, size);
+            var le = img.gameObject.AddComponent<LayoutElement>();
+            le.preferredWidth = size;
+            le.preferredHeight = size;
+            return img;
+        }
+
         /// <summary>A full-screen dark backdrop that blocks clicks.</summary>
         public static Image Dim(Transform parent, float alpha = 0.6f)
         {
