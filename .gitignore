@@ -1,0 +1,25 @@
+# Unity generated
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/.utmp/
+*.csproj
+*.sln
+*.slnx
+*.user
+.vs/
+.idea/
+
+# Signing secrets (back these up separately, never commit)
+/Keystore/
+
+# Art generator scratch (HTML pages + headless Edge profile)
+/Tools/art/out/
+
+# Server runtime
+/Server/node_modules/
