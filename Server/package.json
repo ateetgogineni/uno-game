@@ -1,0 +1,14 @@
+{
+  "name": "uno-game-server",
+  "version": "1.0.0",
+  "description": "Matchmaking and authoritative game server for UNO Game (WebSocket, no dependencies).",
+  "main": "src/index.js",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,15 @@
+# UNO Game matchmaking + game server.
+#   docker compose -f "UNO Game/Server/docker-compose.yml" up -d --build
+# Phones on the home Wi-Fi connect to ws://192.168.29.30:8090/ (see Assets/UnoGame/Resources/GameConfig.asset).
+services:
+  uno-server:
+    build: .
+    image: uno-game-server:latest
+    container_name: uno-server
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - BOT_AFTER_MS=6000       # wait this long for a real player before a bot joins
+      - TURN_MS=15000
+      - STACKING=1              # +2/+4 stacking (must match GameConfig.stacking in Unity)
