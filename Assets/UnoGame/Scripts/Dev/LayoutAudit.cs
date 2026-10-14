@@ -77,8 +77,10 @@ namespace UnoGame.Dev
             Add(items, "Sound", home.soundButton.transform);
             Add(items, "Logo", home.logo);
             Add(items, "Play", home.playButton.transform);
-            Add(items, "Online", home.onlineText.transform);
-            Add(items, "Bottom", home.bottomInfo);
+            Add(items, "OnlineBadge", home.onlinePill);
+            Add(items, "HowHeader", home.howHeader);
+            for (int i = 0; i < home.tipCards.Length; i++) Add(items, "TipCard" + i, home.tipCards[i]);
+            Add(items, "Version", home.bottomInfo);
             Report("home", items, (a, b) => true);
         }
 

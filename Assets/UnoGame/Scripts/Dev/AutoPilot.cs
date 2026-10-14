@@ -36,10 +36,11 @@ namespace UnoGame.Dev
         int turns;
         bool finished;
         bool homeAudited;
+        float loadingSince = -1;
         int superSize = 1;
         bool audioOn;
         int channels = 2;
-        readonly List<float> audio = new List<float>();
+        readonly List<float> audioSamples = new List<float>();
         float startedAt;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -96,7 +97,7 @@ namespace UnoGame.Dev
                         using (var buf = new Unity.Collections.NativeArray<float>(samples * channels, Unity.Collections.Allocator.Temp))
                         {
                             AudioRenderer.Render(buf);
-                            audio.AddRange(buf);
+                            audioSamples.AddRange(buf);
                         }
                     }
                 }
@@ -112,6 +113,14 @@ namespace UnoGame.Dev
                 Finish(2);
                 return;
             }
+
+            if (App.I.IsLoading)
+            {
+                if (loadingSince < 0) loadingSince = Now;
+                if (Now - loadingSince > 0.75f) Shot("03b_loading");
+                return;
+            }
+            loadingSince = -1;
 
             var home = FindAnyObjectByType<HomeScreen>();
             if (home != null)
@@ -132,12 +141,12 @@ namespace UnoGame.Dev
             if (!mm.IsOpen)
             {
                 if (played >= games) { Finish(0); return; }
-                if (Now - homeSince > 1.2f)
+                if (Now - homeSince > 1.6f)
                 {
                     Shot("01_home");
                     if (played == 0 && !homeAudited) { homeAudited = true; LayoutAudit.Home(home); }
                 }
-                if (Now - homeSince > 1.8f) home.OnPlay();
+                if (Now - homeSince > 2.3f) home.OnPlay();
                 mmSince = -1;
                 foundSince = -1;
                 return;
@@ -221,7 +230,7 @@ namespace UnoGame.Dev
             if (audioOn)
             {
                 AudioRenderer.Stop();
-                WriteWav(Path.Combine(captureDir, "audio.wav"), audio, channels, AudioSettings.outputSampleRate);
+                WriteWav(Path.Combine(captureDir, "audio.wav"), audioSamples, channels, AudioSettings.outputSampleRate);
             }
             Debug.Log("[AUTO] done, games played: " + played + (captureDir != null ? ", frames: " + frame : ""));
             if (!keepOpen) Application.Quit(code);
