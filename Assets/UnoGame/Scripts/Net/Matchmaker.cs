@@ -99,7 +99,8 @@ namespace UnoGame.Net
         {
             SearchingOnline = true;
             onlineDeadline = Now + cfg.onlineMatchTimeoutSec;
-            net.Send(Wire.Simple("find"));
+            net.Send(Wire.Find(profile.BotLevel));
+            Debug.Log("[Match] searching online, bot level " + profile.BotLevel);
             StatusChanged?.Invoke();
         }
 
@@ -243,7 +244,8 @@ namespace UnoGame.Net
             int avatar;
             do { avatar = UnityEngine.Random.Range(0, Avatars.Count); } while (avatar == profile.avatar);
             var bot = new PlayerInfo { name = BotNames.Pick(), avatar = avatar };
-            return new LocalSession(cfg, me, bot);
+            Debug.Log("[Match] offline bot level " + profile.BotLevel);
+            return new LocalSession(cfg, me, bot, profile.BotLevel);
         }
 
         void OnApplicationPause(bool paused)

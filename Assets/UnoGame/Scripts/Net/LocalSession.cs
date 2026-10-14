@@ -19,11 +19,13 @@ namespace UnoGame.Net
         float botActAt = -1;
         float turnLen;
         int timeouts;
+        readonly int botLevel;
         readonly List<(float at, int emote)> botEmotes = new List<(float, int)>();
 
-        public LocalSession(GameConfig cfg, PlayerInfo me, PlayerInfo bot)
+        public LocalSession(GameConfig cfg, PlayerInfo me, PlayerInfo bot, int level)
         {
             this.cfg = cfg;
+            botLevel = UnoBot.ClampLevel(level);
             MatchId = "local";
             Seat = MeSeat;
             Players = new[] { me, bot };
@@ -111,7 +113,7 @@ namespace UnoGame.Net
         void BotAct()
         {
             botActAt = -1;
-            var err = UnoBot.Apply(game, BotSeat, UnoBot.Choose(game, BotSeat));
+            var err = UnoBot.Apply(game, BotSeat, UnoBot.Choose(game, BotSeat, botLevel));
             if (err != null) game.AutoMove(BotSeat);
             Flush();
         }
@@ -131,7 +133,9 @@ namespace UnoGame.Net
         public override void Play(int card, int color, bool uno)
         {
             if (!started || game.Over) return;
-            Act(game.Play(MeSeat, card, color, uno));
+            // Forgot UNO? The bot only catches it some of the time (official rule: no catch, no penalty).
+            bool forgive = !uno && Random.value >= UnoBot.CatchChance[botLevel];
+            Act(game.Play(MeSeat, card, color, uno, forgive));
         }
 
         public override void Draw()

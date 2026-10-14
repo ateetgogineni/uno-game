@@ -65,6 +65,7 @@ namespace UnoGame.Game
         bool awaiting;
         int pendingPlay = -1;
         bool unoArmed;
+        bool unoHintShown;
         bool over;
         bool leaving;
         float deadline;
@@ -656,6 +657,12 @@ namespace UnoGame.Game
                 unoButton.gameObject.SetActive(true);
                 unoButton.transform.localScale = Vector3.zero;
                 Tw.Scale(unoButton.transform, 1f, 0.4f, Ease.OutBackStrong);
+                // Teach new players the UNO call (the most common way beginners lose cards).
+                if (!unoHintShown && App.I.Profile.games < 10)
+                {
+                    unoHintShown = true;
+                    toast.Show("2 cards left: tap  <color=#FFD447>UNO!</color>  before you play", 2.8f);
+                }
             }
             else if (!showUno) unoButton.gameObject.SetActive(false);
             if (!showUno) SetUnoArmed(false);

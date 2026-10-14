@@ -65,6 +65,9 @@ namespace UnoGame.Net
 
         public static string Emote(int e) => "{\"t\":\"emote\",\"e\":" + e + "}";
 
+        /// <summary>Search for a match; lvl is the bot difficulty to use if no real player turns up.</summary>
+        public static string Find(int level) => "{\"t\":\"find\",\"lvl\":" + level + "}";
+
         public static string Hello(string pid, string name, int avatar, string resume)
         {
             var sb = new StringBuilder("{\"t\":\"hello\",\"pid\":");
