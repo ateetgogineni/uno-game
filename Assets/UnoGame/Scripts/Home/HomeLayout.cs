@@ -82,31 +82,60 @@ namespace UnoGame.Home
             var playIcon = UIKit.Img(home.playButton.transform, "Icon", UIKit.S("icon_play"), Color.white);
             playIcon.rectTransform.At(new Vector2(0, 0.5f), new Vector2(120, 8), new Vector2(84, 84));
 
-            // online status
-            var online = UIKit.Node("Online", safe).At(new Vector2(0.5f, 0.5f), new Vector2(0, -305), new Vector2(900, 60));
-            var h = online.gameObject.AddComponent<HorizontalLayoutGroup>();
-            h.childAlignment = TextAnchor.MiddleCenter;
-            h.spacing = 14;
-            h.childControlWidth = true;
-            h.childControlHeight = false;
-            h.childForceExpandWidth = false;
-            home.onlineDot = UIKit.Img(online, "Dot", UIKit.S("circle"), Palette.Online);
-            home.onlineDot.rectTransform.sizeDelta = new Vector2(22, 22);
-            var le = home.onlineDot.gameObject.AddComponent<LayoutElement>();
-            le.preferredWidth = 22;
-            le.preferredHeight = 22;
-            home.onlineText = UIKit.Txt(online, "Text", "Connecting...", 38, new Color(1, 1, 1, 0.85f));
-            home.onlineText.rectTransform.sizeDelta = new Vector2(600, 60);
+            // online status badge: live dot + icon + bold caption
+            home.onlinePill = UIKit.Chip(safe, "OnlineBadge", 84);
+            home.onlinePill.At(new Vector2(0.5f, 0.5f), new Vector2(0, -318), new Vector2(400, 84));
+            var dotRoot = UIKit.Node("DotRoot", home.onlinePill);
+            dotRoot.sizeDelta = new Vector2(30, 30);
+            var dotLe = dotRoot.gameObject.AddComponent<LayoutElement>();
+            dotLe.preferredWidth = 30;
+            dotLe.preferredHeight = 30;
+            var halo = UIKit.Img(dotRoot, "Halo", UIKit.S("circle"), new Color(Palette.Online.r, Palette.Online.g, Palette.Online.b, 0.35f));
+            halo.rectTransform.At(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(30, 30));
+            var haloPulse = halo.gameObject.AddComponent<Pulse>();
+            haloPulse.amount = 0.35f;
+            haloPulse.speed = 4f;
+            home.onlineHalo = halo;
+            home.onlineDot = UIKit.Img(dotRoot, "Dot", UIKit.S("circle"), Palette.Online);
+            home.onlineDot.rectTransform.At(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(18, 18));
+            home.onlineIcon = UIKit.LayoutIcon(home.onlinePill, "Icon", UIKit.S("icon_users"), 44, new Color(1, 1, 1, 0.9f));
+            home.onlineText = UIKit.Txt(home.onlinePill, "Text", "CONNECTING", 34, Color.white, TextAlignmentOptions.Center, FontStyles.Bold);
+            home.onlineText.characterSpacing = 4;
+            home.onlineText.rectTransform.sizeDelta = new Vector2(300, 84);
 
-            // bottom info
-            home.bottomInfo = UIKit.Node("Bottom", safe).HStrip(0f, 150, 160);
-            var how = UIKit.Txt(home.bottomInfo, "How", "Match a color or number  •  Stack +2 and +4  •  Call UNO!", 32, new Color(1, 1, 1, 0.6f));
-            how.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, 26), new Vector2(1000, 50));
-            how.enableAutoSizing = true;
-            how.fontSizeMin = 22;
-            how.fontSizeMax = 32;
-            var version = UIKit.Txt(home.bottomInfo, "Version", "v" + Application.version, 28, new Color(1, 1, 1, 0.35f));
-            version.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, -36), new Vector2(400, 40));
+            // how to play: three illustrated template cards
+            home.howHeader = UIKit.Node("HowHeader", safe).At(new Vector2(0.5f, 0.5f), new Vector2(0, -455), new Vector2(900, 50));
+            var head = UIKit.Txt(home.howHeader, "Text", "HOW TO PLAY", 32, Palette.Gold, TextAlignmentOptions.Center, FontStyles.Bold);
+            head.characterSpacing = 10;
+            head.rectTransform.Fill();
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var line = UIKit.Img(home.howHeader, "Line", UIKit.S("rounded_small"), new Color(1f, 0.76f, 0.1f, 0.45f));
+                line.type = Image.Type.Simple;
+                line.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(side * 270, 0), new Vector2(200, 4));
+            }
+            home.tipCards = new RectTransform[3];
+            home.tipCards[0] = TipCard(safe, -340, "Match a\ncolor or number", tc =>
+            {
+                MiniCard(tc, "card_red_7", new Vector2(-34, 34), -10f);
+                MiniCard(tc, "card_blue_7", new Vector2(34, 30), 10f);
+            });
+            home.tipCards[1] = TipCard(safe, 0, "Stack <color=#FF6B5E>+2</color> and\n<color=#FFD447>+4</color> on them", tc =>
+            {
+                MiniCard(tc, "card_blue_12", new Vector2(-34, 34), -10f);
+                MiniCard(tc, "card_wild4", new Vector2(34, 30), 10f);
+            });
+            home.tipCards[2] = TipCard(safe, 340, "Call UNO!\nat 2 cards", tc =>
+            {
+                var burst = UIKit.Img(tc, "Burst", UIKit.S("uno_burst"), Color.white);
+                burst.type = Image.Type.Simple;
+                burst.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, 34), new Vector2(200, 123));
+            });
+
+            // version
+            home.bottomInfo = UIKit.Node("Bottom", safe).HStrip(0f, 46, 50);
+            var version = UIKit.Txt(home.bottomInfo, "Version", "v" + Application.version, 26, new Color(1, 1, 1, 0.35f));
+            version.rectTransform.Fill();
 
             // overlays (full screen, above everything)
             var overlays = UIKit.Node("Overlays", canvasRoot).Fill();
@@ -126,6 +155,44 @@ namespace UnoGame.Home
             BuildDialog(home.quitDialog, qd);
             qd.gameObject.SetActive(false);
             return home;
+        }
+
+        /// <summary>One "how to play" card: illustration on top, two-line caption below.</summary>
+        static RectTransform TipCard(RectTransform parent, float x, string caption, System.Action<RectTransform> art)
+        {
+            var card = UIKit.Img(parent, "TipCard", UIKit.S("panel"), new Color(1, 1, 1, 0.93f)).rectTransform;
+            card.At(new Vector2(0.5f, 0.5f), new Vector2(x, -640), new Vector2(316, 256));
+            card.GetComponent<Image>().pixelsPerUnitMultiplier = 1.6f;
+            var glow = UIKit.Img(card, "Glow", UIKit.S("glow"), new Color(0.55f, 0.42f, 1f, 0.35f));
+            glow.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, 34), new Vector2(260, 200));
+            var artRoot = UIKit.Node("Art", card).Fill();
+            art(artRoot);
+            var t = UIKit.Txt(card, "Caption", caption, 29, Color.white, TextAlignmentOptions.Center, FontStyles.Bold);
+            t.lineSpacing = -8;
+            t.rectTransform.At(new Vector2(0.5f, 0f), new Vector2(0, 52), new Vector2(296, 84));
+            return card;
+        }
+
+        static void MiniCard(RectTransform parent, string sprite, Vector2 pos, float rot)
+        {
+            var shadow = UIKit.Img(parent, "Shadow", UIKit.S("card_shadow"), new Color(1, 1, 1, 0.7f));
+            shadow.type = Image.Type.Simple;
+            shadow.rectTransform.At(new Vector2(0.5f, 0.5f), pos + new Vector2(0, -5), new Vector2(98, 130));
+            shadow.rectTransform.localEulerAngles = new Vector3(0, 0, rot);
+            Sprite s = sprite.StartsWith("card_") ? CardSprite(sprite) : UIKit.S(sprite);
+            var img = UIKit.Img(parent, sprite, s, Color.white);
+            img.type = Image.Type.Simple;
+            img.rectTransform.At(new Vector2(0.5f, 0.5f), pos, new Vector2(80, 112));
+            img.rectTransform.localEulerAngles = new Vector3(0, 0, rot);
+        }
+
+        static Sprite CardSprite(string name)
+        {
+            if (name == "card_wild") return ArtLibrary.I.cardFaces[52];
+            if (name == "card_wild4") return ArtLibrary.I.cardFaces[53];
+            var parts = name.Split('_');
+            int c = System.Array.IndexOf(new[] { "red", "yellow", "green", "blue" }, parts[1]);
+            return ArtLibrary.I.cardFaces[c * 13 + int.Parse(parts[2])];
         }
 
         static void BuildDialog(ConfirmDialog d, RectTransform root)
