@@ -24,6 +24,7 @@ namespace UnoGame.Home
         public TextMeshProUGUI timer;
         public TextMeshProUGUI tip;
         public TextMeshProUGUI mode;
+        public RectTransform modeChip;
         public Button cancel;
 
         static readonly string[] Tips =
@@ -72,8 +73,8 @@ namespace UnoGame.Home
             tipIndex = Random.Range(0, Tips.Length);
             tip.text = Tips[tipIndex];
             nextTip = Time.unscaledTime + 4f;
-            status.text = "Finding a player";
-            mode.text = "";
+            status.text = "FINDING PLAYERS...";
+            modeChip.gameObject.SetActive(false);
             App.I.Match.Matched += OnMatched;
             App.I.Match.StartSearch();
             Debug.Log("[Home] matchmaking started");
@@ -113,8 +114,14 @@ namespace UnoGame.Home
             oppAvatar.sprite = ArtLibrary.I.Avatar(s.Opponent.avatar);
             oppName.text = s.Opponent.name;
             myName.text = s.Me.name;
-            status.text = "Player found!";
-            mode.text = s.IsOnline ? "" : "Offline match";
+            status.text = "PLAYER FOUND!";
+            Tw.Punch(status.transform, 0.18f, 0.4f);
+            if (!s.IsOnline)
+            {
+                modeChip.gameObject.SetActive(true);
+                modeChip.localScale = Vector3.zero;
+                Tw.Scale(modeChip, 1f, 0.4f, Ease.OutBack, 0.2f);
+            }
             animator.SetTrigger("found");
             App.Play(Sound.Found);
             yield return Tw.Wait(0.45f);
@@ -133,8 +140,6 @@ namespace UnoGame.Home
                 float t = Time.unscaledTime - openedAt;
                 int secs = Mathf.FloorToInt(t);
                 timer.text = $"{secs / 60}:{secs % 60:00}";
-                int dots = Mathf.FloorToInt(t * 2.5f) % 4;
-                status.text = "Finding a player" + new string('.', dots) + "<color=#00000000>" + new string('.', 3 - dots) + "</color>";
                 if (Time.unscaledTime >= nextTip)
                 {
                     nextTip = Time.unscaledTime + 4f;
@@ -204,15 +209,39 @@ namespace UnoGame.Home
 
             var statusRoot = UIKit.Node("Status", safe).At(new Vector2(0.5f, 0.5f), new Vector2(0, -330), new Vector2(1000, 260));
             UIKit.Group(statusRoot, 1f, false);
-            status = UIKit.Txt(statusRoot, "Text", "Finding a player", 56, Color.white, TextAlignmentOptions.Center, FontStyles.Bold).Shadowed();
-            status.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, 60), new Vector2(1000, 80));
-            timer = UIKit.Txt(statusRoot, "Timer", "0:00", 44, Palette.Gold, TextAlignmentOptions.Center, FontStyles.Bold);
-            timer.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, -16), new Vector2(400, 60));
-            mode = UIKit.Txt(statusRoot, "Mode", "", 34, new Color(1, 1, 1, 0.65f));
-            mode.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, -78), new Vector2(600, 50));
-            tip = UIKit.Txt(safe, "Tip", "", 34, new Color(1, 1, 1, 0.7f));
+            status = UIKit.Txt(statusRoot, "Text", "FINDING PLAYERS...", 64, Color.white, TextAlignmentOptions.Center, FontStyles.Bold).Shadowed();
+            status.characterSpacing = 6;
+            status.Gradient(Color.white, new Color(1f, 0.82f, 0.3f));
+            status.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, 70), new Vector2(1000, 96));
+            status.gameObject.AddComponent<WaveText>().amplitude = 6f;
+
+            var timerChip = UIKit.Chip(statusRoot, "TimerChip", 70);
+            timerChip.At(new Vector2(0.5f, 0.5f), new Vector2(0, -20), new Vector2(200, 70));
+            UIKit.LayoutIcon(timerChip, "Clock", UIKit.S("icon_clock"), 36, Palette.Gold);
+            timer = UIKit.Txt(timerChip, "Timer", "0:00", 40, Palette.Gold, TextAlignmentOptions.Center, FontStyles.Bold);
+            timer.rectTransform.sizeDelta = new Vector2(100, 70);
+
+            modeChip = UIKit.Chip(statusRoot, "ModeChip", 58, new Color(0.95f, 0.5f, 0.1f, 0.9f), 26f);
+            modeChip.At(new Vector2(0.5f, 0.5f), new Vector2(0, -100), new Vector2(300, 58));
+            UIKit.LayoutIcon(modeChip, "Icon", UIKit.S("icon_bolt"), 30, Color.white);
+            mode = UIKit.Txt(modeChip, "Text", "OFFLINE MATCH", 30, Color.white, TextAlignmentOptions.Center, FontStyles.Bold);
+            mode.characterSpacing = 4;
+            mode.rectTransform.sizeDelta = new Vector2(260, 58);
+            modeChip.gameObject.SetActive(false);
+
+            // tip card with a gold TIP badge
+            var tipCard = UIKit.Img(safe, "TipCard", UIKit.S("panel"), new Color(1, 1, 1, 0.95f)).rectTransform;
+            tipCard.At(new Vector2(0.5f, 0.5f), new Vector2(0, -565), new Vector2(920, 150));
+            tipCard.GetComponent<Image>().pixelsPerUnitMultiplier = 1.6f;
+            var badge = UIKit.Img(tipCard, "Badge", UIKit.S("rounded"), Palette.Gold).rectTransform;
+            badge.At(new Vector2(0, 0.5f), new Vector2(84, 0), new Vector2(112, 58));
+            badge.GetComponent<Image>().pixelsPerUnitMultiplier = 2.2f;
+            var badgeText = UIKit.Txt(badge, "Text", "TIP", 32, Palette.Ink, TextAlignmentOptions.Center, FontStyles.Bold);
+            badgeText.characterSpacing = 4;
+            badgeText.rectTransform.Fill(0, 2, 0, 0);
+            tip = UIKit.Txt(tipCard, "Text", "", 32, new Color(1, 1, 1, 0.92f), TextAlignmentOptions.Left);
             tip.textWrappingMode = TextWrappingModes.Normal;
-            tip.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(0, -520), new Vector2(880, 110));
+            tip.rectTransform.Fill(166, 14, 34, 14);
 
             cancel = UIKit.Btn(safe, "Cancel", UIKit.S("btn_red"), new Vector2(420, 132), "CANCEL", 50);
             ((RectTransform)cancel.transform).At(new Vector2(0.5f, 0), new Vector2(0, 170), new Vector2(420, 132));
