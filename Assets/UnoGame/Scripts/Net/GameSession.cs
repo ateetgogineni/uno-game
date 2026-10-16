@@ -16,6 +16,7 @@ namespace UnoGame.Net
         public PlayerInfo[] Players;
         public int Seat;
         public string MatchId;
+        public string Mode = "classic";
         public bool Finished;
 
         /// <summary>(seat, emote id) — delivered immediately, not queued behind animations.</summary>
@@ -36,6 +37,8 @@ namespace UnoGame.Net
         public abstract void Play(int card, int color, bool uno);
         public abstract void Draw();
         public abstract void Pass();
+        public abstract void Roulette(int color);
+        public abstract void Dare(bool ok);
         public abstract void Emote(int e);
         public abstract void Leave();
         public abstract void RequestSync();
@@ -65,8 +68,12 @@ namespace UnoGame.Net
 
         public static string Emote(int e) => "{\"t\":\"emote\",\"e\":" + e + "}";
 
-        /// <summary>Search for a match; lvl is the bot difficulty to use if no real player turns up.</summary>
-        public static string Find(int level) => "{\"t\":\"find\",\"lvl\":" + level + "}";
+        /// <summary>Search for a match in a game mode; lvl is the bot difficulty to use if no real player turns up.</summary>
+        public static string Find(int level, string mode) => "{\"t\":\"find\",\"lvl\":" + level + ",\"mode\":\"" + mode + "\"}";
+
+        public static string Roulette(int color) => "{\"t\":\"roulette\",\"color\":" + color + "}";
+
+        public static string Dare(bool ok) => "{\"t\":\"dare\",\"ok\":" + (ok ? "true" : "false") + "}";
 
         public static string Hello(string pid, string name, int avatar, string resume)
         {
@@ -101,6 +108,7 @@ namespace UnoGame.Net
         {
             this.owner = owner;
             MatchId = matched.match;
+            Mode = Core.Decks.Normalize(matched.mode);
             Seat = matched.seat;
             Players = matched.players;
         }
@@ -117,6 +125,8 @@ namespace UnoGame.Net
         public override void Play(int card, int color, bool uno) => owner.Send(Wire.Play(card, color, uno));
         public override void Draw() => owner.Send(Wire.Simple("draw"));
         public override void Pass() => owner.Send(Wire.Simple("pass"));
+        public override void Roulette(int color) => owner.Send(Wire.Roulette(color));
+        public override void Dare(bool ok) => owner.Send(Wire.Dare(ok));
         public override void Emote(int e) => owner.Send(Wire.Emote(e));
         public override void RequestSync() => owner.Send(Wire.Simple("sync"));
 

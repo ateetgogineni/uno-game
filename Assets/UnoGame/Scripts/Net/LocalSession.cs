@@ -22,9 +22,10 @@ namespace UnoGame.Net
         readonly int botLevel;
         readonly List<(float at, int emote)> botEmotes = new List<(float, int)>();
 
-        public LocalSession(GameConfig cfg, PlayerInfo me, PlayerInfo bot, int level)
+        public LocalSession(GameConfig cfg, PlayerInfo me, PlayerInfo bot, int level, string mode)
         {
             this.cfg = cfg;
+            Mode = Decks.Normalize(mode);
             botLevel = UnoBot.ClampLevel(level);
             MatchId = "local";
             Seat = MeSeat;
@@ -37,7 +38,7 @@ namespace UnoGame.Net
         {
             if (started) return;
             started = true;
-            game = new UnoEngine(2, Random.Range(1, int.MaxValue), cfg.stacking);
+            game = new UnoEngine(2, Random.Range(1, int.MaxValue), cfg.stacking, Mode);
             game.Start();
             Flush();
         }
@@ -53,6 +54,12 @@ namespace UnoGame.Net
                 else if (ev.k == "draw" || ev.k == "unoPen") ms += 220 * Mathf.Max(1, ev.n);
                 else if (ev.k == "play") ms += 450;
                 else if (ev.k == "reshuffle") ms += 600;
+                else if (ev.k == "launch") ms += 500 + 200 * ev.n;
+                else if (ev.k == "roulette") ms += 400 + 200 * ev.n;
+                else if (ev.k == "discardAll") ms += 250 * ev.n;
+                else if (ev.k == "flip") ms += 1000;
+                else if (ev.k == "swap") ms += 900;
+                else if (ev.k == "dare" || ev.k == "darePending" || ev.k == "roulettePending") ms += 400;
             }
             return ms / 1000f;
         }
@@ -81,7 +88,7 @@ namespace UnoGame.Net
             foreach (var ev in events)
             {
                 if (ev.k == "win") e = ev.p == BotSeat ? (Random.value < 0.5f ? Emotes.Happy : Emotes.Cool) : Emotes.Sad;
-                else if (ev.k == "play" && ev.p == BotSeat && (Cards.ValueOf(ev.card) == Cards.Wild4 || Cards.ValueOf(ev.card) == Cards.Draw2)) e = Emotes.Laugh;
+                else if (ev.k == "stack" && game.Turn != BotSeat) e = Emotes.Laugh;
                 else if (ev.k == "draw" && ev.p == BotSeat && ev.n >= 4) e = Random.value < 0.5f ? Emotes.Angry : Emotes.Wow;
             }
             if (e >= 0 && Random.value < 0.35f) botEmotes.Add((Now + Random.Range(0.7f, 1.3f), e));
@@ -148,6 +155,18 @@ namespace UnoGame.Net
         {
             if (!started || game.Over) return;
             Act(game.Pass(MeSeat));
+        }
+
+        public override void Roulette(int color)
+        {
+            if (!started || game.Over) return;
+            Act(game.Roulette(MeSeat, color));
+        }
+
+        public override void Dare(bool ok)
+        {
+            if (!started || game.Over) return;
+            Act(game.Dare(MeSeat, ok));
         }
 
         public override void Emote(int e)

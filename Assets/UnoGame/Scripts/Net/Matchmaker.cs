@@ -76,9 +76,12 @@ namespace UnoGame.Net
             if (net.IsOpen) net.Send(Wire.Hello(profile.pid, profile.name, profile.avatar, resume));
         }
 
-        public void StartSearch()
+        public string SearchMode { get; private set; } = "classic";
+
+        public void StartSearch(string mode)
         {
             if (Current == Phase.Searching) return;
+            SearchMode = Core.Decks.Normalize(mode);
             EndSession();
             Current = Phase.Searching;
             searchStart = Now;
@@ -99,8 +102,8 @@ namespace UnoGame.Net
         {
             SearchingOnline = true;
             onlineDeadline = Now + cfg.onlineMatchTimeoutSec;
-            net.Send(Wire.Find(profile.BotLevel));
-            Debug.Log("[Match] searching online, bot level " + profile.BotLevel);
+            net.Send(Wire.Find(profile.BotLevel, SearchMode));
+            Debug.Log("[Match] searching online for " + SearchMode + ", bot level " + profile.BotLevel);
             StatusChanged?.Invoke();
         }
 
@@ -244,8 +247,8 @@ namespace UnoGame.Net
             int avatar;
             do { avatar = UnityEngine.Random.Range(0, Avatars.Count); } while (avatar == profile.avatar);
             var bot = new PlayerInfo { name = BotNames.Pick(), avatar = avatar };
-            Debug.Log("[Match] offline bot level " + profile.BotLevel);
-            return new LocalSession(cfg, me, bot, profile.BotLevel);
+            Debug.Log("[Match] offline " + SearchMode + ", bot level " + profile.BotLevel);
+            return new LocalSession(cfg, me, bot, profile.BotLevel, SearchMode);
         }
 
         void OnApplicationPause(bool paused)
