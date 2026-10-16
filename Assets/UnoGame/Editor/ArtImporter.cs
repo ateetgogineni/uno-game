@@ -25,7 +25,8 @@ namespace UnoGame.EditorTools
         public static void ImportAll()
         {
             AssetDatabase.Refresh();
-            ImportAtlas("cards", TextureImporterFormat.ASTC_6x6);
+            ImportAtlas("cards_a", TextureImporterFormat.ASTC_6x6);
+            ImportAtlas("cards_b", TextureImporterFormat.ASTC_6x6);
             ImportAtlas("ui", TextureImporterFormat.ASTC_5x5);
             ImportSingle("logo", TextureImporterFormat.ASTC_5x5, 1024);
             ImportSingle("bg_table", TextureImporterFormat.ASTC_8x8, 2048);
@@ -108,26 +109,25 @@ namespace UnoGame.EditorTools
                 lib = ScriptableObject.CreateInstance<ArtLibrary>();
                 AssetDatabase.CreateAsset(lib, LibraryPath);
             }
-            var cards = Sprites("cards");
+            var cards = Sprites("cards_a").Concat(Sprites("cards_b")).ToDictionary(p => p.Key, p => p.Value);
             var ui = Sprites("ui");
             string[] colors = { "red", "yellow", "green", "blue" };
-            lib.cardFaces = new Sprite[54];
-            for (int c = 0; c < 4; c++)
-                for (int v = 0; v <= 12; v++) lib.cardFaces[c * 13 + v] = cards[$"card_{colors[c]}_{v}"];
-            lib.cardFaces[52] = cards["card_wild"];
-            lib.cardFaces[53] = cards["card_wild4"];
+            string[] dark = { "pink", "teal", "orange", "purple" };
+            lib.cards = cards.Where(p => p.Key.StartsWith("c_") || p.Key.StartsWith("w_") || p.Key.StartsWith("wd_"))
+                .Select(p => p.Value).OrderBy(s => s.name).ToList();
             lib.cardBack = cards["card_back"];
             lib.cardMask = cards["card_mask"];
             lib.avatars = Enumerable.Range(0, 12).Select(i => ui["avatar_" + i]).ToArray();
             lib.emotes = Enumerable.Range(0, 6).Select(i => ui["emote_" + i]).ToArray();
             lib.balls = colors.Select(c => ui["ball_" + c]).ToArray();
+            lib.darkBalls = dark.Select(c => ui["ball_" + c]).ToArray();
             lib.ui = ui.Values.OrderBy(s => s.name).ToList();
             lib.logo = AssetDatabase.LoadAssetAtPath<Sprite>(Dir + "logo.png");
             lib.bgTable = AssetDatabase.LoadAssetAtPath<Sprite>(Dir + "bg_table.png");
             lib.bgHome = AssetDatabase.LoadAssetAtPath<Sprite>(Dir + "bg_home.png");
             EditorUtility.SetDirty(lib);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[Art] library: {lib.cardFaces.Count(s => s != null)} faces, {lib.ui.Count} ui sprites");
+            Debug.Log($"[Art] library: {lib.cards.Count} card faces, {lib.ui.Count} ui sprites");
         }
     }
 }

@@ -117,7 +117,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 4
-        y: 2064
+        y: 2448
         width: 368
         height: 488
       alignment: 0
@@ -139,7 +139,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 376
-        y: 2064
+        y: 2448
         width: 368
         height: 488
       alignment: 0
@@ -161,7 +161,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 748
-        y: 2360
+        y: 2744
         width: 192
         height: 192
       alignment: 0
@@ -183,7 +183,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 944
-        y: 2488
+        y: 2872
         width: 64
         height: 64
       alignment: 0
@@ -205,7 +205,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 1012
-        y: 2296
+        y: 2680
         width: 256
         height: 256
       alignment: 0
@@ -227,7 +227,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 1272
-        y: 2412
+        y: 2796
         width: 300
         height: 140
       alignment: 0
@@ -249,7 +249,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 1576
-        y: 2412
+        y: 2796
         width: 300
         height: 140
       alignment: 0
@@ -271,7 +271,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 4
-        y: 1920
+        y: 2304
         width: 300
         height: 140
       alignment: 0
@@ -293,7 +293,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 308
-        y: 1920
+        y: 2304
         width: 300
         height: 140
       alignment: 0
@@ -315,7 +315,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 612
-        y: 1920
+        y: 2304
         width: 300
         height: 140
       alignment: 0
@@ -337,7 +337,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 916
-        y: 1804
+        y: 2188
         width: 256
         height: 256
       alignment: 0
@@ -359,7 +359,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 1176
-        y: 1804
+        y: 2188
         width: 256
         height: 256
       alignment: 0
@@ -381,7 +381,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 1436
-        y: 1804
+        y: 2188
         width: 256
         height: 256
       alignment: 0
@@ -403,7 +403,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 1696
-        y: 1804
+        y: 2188
         width: 256
         height: 256
       alignment: 0
@@ -425,7 +425,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 4
-        y: 1288
+        y: 1672
         width: 512
         height: 512
       alignment: 0
@@ -447,7 +447,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 520
-        y: 1580
+        y: 1964
         width: 220
         height: 220
       alignment: 0
@@ -469,7 +469,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 744
-        y: 1580
+        y: 1964
         width: 220
         height: 220
       alignment: 0
@@ -491,7 +491,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 968
-        y: 1580
+        y: 1964
         width: 220
         height: 220
       alignment: 0
@@ -513,7 +513,7 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 1192
-        y: 1580
+        y: 1964
         width: 220
         height: 220
       alignment: 0
@@ -534,8 +534,8 @@ TextureImporter:
       name: uno_burst
       rect:
         serializedVersion: 2
-        x: 1416
-        y: 1480
+        x: 452
+        y: 1348
         width: 520
         height: 320
       alignment: 0
@@ -556,8 +556,8 @@ TextureImporter:
       name: vs
       rect:
         serializedVersion: 2
-        x: 4
-        y: 1044
+        x: 976
+        y: 1428
         width: 340
         height: 240
       alignment: 0
@@ -578,8 +578,8 @@ TextureImporter:
       name: ribbon_gold
       rect:
         serializedVersion: 2
-        x: 348
-        y: 1094
+        x: 4
+        y: 1154
         width: 760
         height: 190
       alignment: 0
@@ -600,8 +600,8 @@ TextureImporter:
       name: ribbon_gray
       rect:
         serializedVersion: 2
-        x: 1112
-        y: 1094
+        x: 768
+        y: 1154
         width: 760
         height: 190
       alignment: 0
@@ -622,8 +622,8 @@ TextureImporter:
       name: bubble
       rect:
         serializedVersion: 2
-        x: 4
-        y: 840
+        x: 1532
+        y: 1144
         width: 200
         height: 200
       alignment: 0
@@ -644,8 +644,8 @@ TextureImporter:
       name: fx_skip
       rect:
         serializedVersion: 2
-        x: 208
-        y: 784
+        x: 1736
+        y: 1088
         width: 256
         height: 256
       alignment: 0
@@ -666,8 +666,8 @@ TextureImporter:
       name: fx_reverse
       rect:
         serializedVersion: 2
-        x: 468
-        y: 784
+        x: 4
+        y: 828
         width: 256
         height: 256
       alignment: 0
@@ -688,8 +688,8 @@ TextureImporter:
       name: coin
       rect:
         serializedVersion: 2
-        x: 728
-        y: 912
+        x: 264
+        y: 956
         width: 128
         height: 128
       alignment: 0
@@ -710,8 +710,8 @@ TextureImporter:
       name: crown
       rect:
         serializedVersion: 2
-        x: 860
-        y: 912
+        x: 396
+        y: 956
         width: 160
         height: 128
       alignment: 0
@@ -732,8 +732,8 @@ TextureImporter:
       name: icon_back
       rect:
         serializedVersion: 2
-        x: 1024
-        y: 912
+        x: 1088
+        y: 956
         width: 128
         height: 128
       alignment: 0
@@ -754,8 +754,8 @@ TextureImporter:
       name: icon_dots
       rect:
         serializedVersion: 2
-        x: 1156
-        y: 912
+        x: 1220
+        y: 956
         width: 128
         height: 128
       alignment: 0
@@ -776,8 +776,8 @@ TextureImporter:
       name: icon_close
       rect:
         serializedVersion: 2
-        x: 1288
-        y: 912
+        x: 1352
+        y: 956
         width: 128
         height: 128
       alignment: 0
@@ -798,8 +798,8 @@ TextureImporter:
       name: icon_sound_on
       rect:
         serializedVersion: 2
-        x: 1420
-        y: 912
+        x: 1484
+        y: 956
         width: 128
         height: 128
       alignment: 0
@@ -820,8 +820,8 @@ TextureImporter:
       name: icon_sound_off
       rect:
         serializedVersion: 2
-        x: 1552
-        y: 912
+        x: 1616
+        y: 956
         width: 128
         height: 128
       alignment: 0
@@ -842,8 +842,8 @@ TextureImporter:
       name: icon_home
       rect:
         serializedVersion: 2
-        x: 1684
-        y: 912
+        x: 1748
+        y: 956
         width: 128
         height: 128
       alignment: 0
@@ -864,8 +864,8 @@ TextureImporter:
       name: icon_replay
       rect:
         serializedVersion: 2
-        x: 1816
-        y: 912
+        x: 1880
+        y: 956
         width: 128
         height: 128
       alignment: 0
@@ -1542,6 +1542,160 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: ball_pink
+      rect:
+        serializedVersion: 2
+        x: 1416
+        y: 1964
+        width: 220
+        height: 220
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: f76c20e0e3d4d3740b105545ba403356
+      internalID: 1253942190
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ball_teal
+      rect:
+        serializedVersion: 2
+        x: 1640
+        y: 1964
+        width: 220
+        height: 220
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: faded1f4b5c228c4eb9a52d31620c4a5
+      internalID: 1732433743
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ball_orange
+      rect:
+        serializedVersion: 2
+        x: 4
+        y: 1448
+        width: 220
+        height: 220
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 6e6bcc6fe7d11924e8ffaed0cea60f23
+      internalID: -2002822550
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ball_purple
+      rect:
+        serializedVersion: 2
+        x: 228
+        y: 1448
+        width: 220
+        height: 220
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 8b6258bebc261374893e0cbb1fe10719
+      internalID: 246470098
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: launcher
+      rect:
+        serializedVersion: 2
+        x: 560
+        y: 784
+        width: 260
+        height: 300
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 98ee5c16ca4383b42afc708cfd8a897f
+      internalID: 1206839716
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: icon_info
+      rect:
+        serializedVersion: 2
+        x: 824
+        y: 956
+        width: 128
+        height: 128
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 8c4688b51aab1824c8f9ea2fe0ead493
+      internalID: -1025224917
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: icon_flip
+      rect:
+        serializedVersion: 2
+        x: 956
+        y: 956
+        width: 128
+        height: 128
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 89ba4b73e4f3e6e4da4d9140608de67d
+      internalID: 1996034353
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
@@ -1570,7 +1724,11 @@ TextureImporter:
       avatar_9: -574141077
       ball_blue: -593975016
       ball_green: -367730931
+      ball_orange: -2002822550
+      ball_pink: 1253942190
+      ball_purple: 246470098
       ball_red: 1168920373
+      ball_teal: 1732433743
       ball_yellow: -2128094086
       btn_blue: 547526864
       btn_gray: -460647052
@@ -1601,8 +1759,10 @@ TextureImporter:
       icon_dot: 26375187
       icon_dots: -1990969510
       icon_edit: 415605552
+      icon_flip: 1996034353
       icon_gear: 914191143
       icon_home: 732134847
+      icon_info: -1025224917
       icon_play: -78781925
       icon_replay: -868577393
       icon_sound_off: -674739182
@@ -1611,6 +1771,7 @@ TextureImporter:
       icon_star: 2038572131
       icon_trophy: -709232032
       icon_users: -590425727
+      launcher: 1206839716
       panel: 738159846
       rays: 592059614
       ribbon_gold: -68694507

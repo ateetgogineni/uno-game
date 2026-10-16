@@ -218,6 +218,185 @@ function cardSilhouette(fill, blur, pad, opacity, scale = 1) {
   return svg(w, h, rrect((w - sw) / 2, (h - sh) / 2, sw, sh, 30 * scale, `fill="${fill}" opacity="${opacity}" ${blur ? `filter="url(#${fl})"` : ''}`), defs);
 }
 
+// ---------- game-mode cards (all modes; names match Cards.SpriteName in Unity) ----------
+
+const DARK = {
+  pink: { base: '#E0399C', light: '#FF86CF', dark: '#8E1260' },
+  teal: { base: '#0FA0A3', light: '#62E2DF', dark: '#095F62' },
+  orange: { base: '#F2731F', light: '#FFAD6B', dark: '#A4460B' },
+  purple: { base: '#7A3FCB', light: '#B58BFF', dark: '#4A1D88' },
+};
+const LIGHT_KEYS = ['red', 'yellow', 'green', 'blue'];
+const DARK_KEYS = ['pink', 'teal', 'orange', 'purple'];
+const DARK_FRAME = '#17121F';
+
+function frame(col, dark, defsOut) {
+  const g = id('g'), sheen = id('s');
+  defsOut.push(`<linearGradient id="${g}" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="${col.light}"/><stop offset="0.55" stop-color="${col.base}"/><stop offset="1" stop-color="${col.base}"/></linearGradient>`);
+  defsOut.push(`<linearGradient id="${sheen}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.22"/><stop offset="0.5" stop-color="#fff" stop-opacity="0"/></linearGradient>`);
+  return rrect(1, 1, CW - 2, CH - 2, 30, `fill="${dark ? DARK_FRAME : '#ffffff'}"`) +
+    rrect(3, 3, CW - 6, CH - 6, 28, `fill="none" stroke="${dark ? '#fff' : '#000'}" stroke-opacity="${dark ? 0.16 : 0.1}" stroke-width="2"`) +
+    rrect(15, 15, CW - 30, CH - 30, 20, `fill="url(#${g})"`) +
+    rrect(15, 15, CW - 30, CH - 30, 20, `fill="url(#${sheen})"`) +
+    rrect(15, 15, CW - 30, CH - 30, 20, `fill="none" stroke="#000" stroke-opacity="0.12" stroke-width="3"`);
+}
+
+function rainbow(defsOut) {
+  const g = id('rb');
+  defsOut.push(`<linearGradient id="${g}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${COL.red.base}"/><stop offset="0.35" stop-color="${COL.yellow.base}"/><stop offset="0.65" stop-color="${COL.green.base}"/><stop offset="1" stop-color="${COL.blue.base}"/></linearGradient>`);
+  return `url(#${g})`;
+}
+
+function leaf(fill = '#fff', shade = 0.18) {
+  return `<path d="${LEAF}" fill="#000" opacity="${shade}" transform="translate(4 7)"/><path d="${LEAF}" fill="${fill}"/>`;
+}
+
+function shadowed(g) { return `<g opacity="0.22" transform="translate(5 8)">${g(INK)}</g>${g(null)}`; }
+
+function bigText(str, fill, size = 150, y = 214, rot = 0) {
+  const tr = rot ? `transform="rotate(${rot} 150 ${y})"` : '';
+  return `<g ${tr}>` + text(156, y + 8, size, str, INK, INK, 14, 'opacity="0.25"') + text(150, y, size, str, fill, INK, 12) + `</g>`;
+}
+
+function arrowsSwap(cx, cy, s, fill, outline) {
+  const a = `M${cx - 60 * s} ${cy - 22 * s} L${cx + 40 * s} ${cy - 22 * s}`, b = `M${cx + 60 * s} ${cy + 22 * s} L${cx - 40 * s} ${cy + 22 * s}`;
+  const ha = `${cx + 40 * s},${cy - 46 * s} ${cx + 72 * s},${cy - 22 * s} ${cx + 40 * s},${cy + 2 * s}`;
+  const hb = `${cx - 40 * s},${cy - 2 * s} ${cx - 72 * s},${cy + 22 * s} ${cx - 40 * s},${cy + 46 * s}`;
+  const sw = 20 * s, ow = 10 * s;
+  return `<g stroke-linecap="round" stroke-linejoin="round">` +
+    `<path d="${a} ${b}" fill="none" stroke="${outline}" stroke-width="${sw + ow}"/>` +
+    `<polygon points="${ha}" fill="${outline}" stroke="${outline}" stroke-width="${ow}"/><polygon points="${hb}" fill="${outline}" stroke="${outline}" stroke-width="${ow}"/>` +
+    `<path d="${a} ${b}" fill="none" stroke="${fill}" stroke-width="${sw}"/>` +
+    `<polygon points="${ha}" fill="${fill}"/><polygon points="${hb}" fill="${fill}"/></g>`;
+}
+
+function burstShape(cx, cy, r1, r2, n, fill, outline, ow) {
+  return `<path d="${starPath(cx, cy, r1, r2, n)}" fill="${fill}" stroke="${outline}" stroke-width="${ow}" stroke-linejoin="round"/>`;
+}
+
+function wheel(cx, cy, r, colors) {
+  let s = `<circle cx="${cx}" cy="${cy}" r="${r + 6}" fill="${INK}"/>`;
+  for (let i = 0; i < 8; i++) {
+    const a0 = i * Math.PI / 4 - Math.PI / 2, a1 = a0 + Math.PI / 4;
+    s += `<path d="M${cx} ${cy} L${f(cx + r * Math.cos(a0))} ${f(cy + r * Math.sin(a0))} A${r} ${r} 0 0 1 ${f(cx + r * Math.cos(a1))} ${f(cy + r * Math.sin(a1))} Z" fill="${colors[i % 4]}"/>`;
+  }
+  return s + `<circle cx="${cx}" cy="${cy}" r="${r * 0.28}" fill="#fff" stroke="${INK}" stroke-width="6"/>` +
+    `<path d="M${cx - 16} ${cy - r - 22} L${cx + 16} ${cy - r - 22} L${cx} ${cy - r + 10} Z" fill="#fff" stroke="${INK}" stroke-width="6" stroke-linejoin="round"/>`;
+}
+
+function crosshair(cx, cy, r, fill) {
+  const s = `<circle cx="${cx}" cy="${cy}" r="${r}"/><circle cx="${cx}" cy="${cy}" r="${r * 0.45}"/>` +
+    `<path d="M${cx} ${cy - r - 18} L${cx} ${cy - r * 0.6} M${cx} ${cy + r + 18} L${cx} ${cy + r * 0.6} M${cx - r - 18} ${cy} L${cx - r * 0.6} ${cy} M${cx + r + 18} ${cy} L${cx + r * 0.6} ${cy}"/>`;
+  return `<g fill="none" stroke-linecap="round"><g stroke="${INK}" stroke-width="26">${s}</g><g stroke="${fill}" stroke-width="14">${s}</g></g>`;
+}
+
+function cornerText(str, size = 46) { return corners((x, y) => text(x + 4, y, size, str, '#fff', INK, 8)); }
+
+// Coloured card. kind: number | skip | rev | d1 | d2 | d4 | d5 | flip | skipall | discard | hit2 | swap | dare
+function modeCard(colKey, kind, darkSide) {
+  const col = darkSide ? DARK[colKey] : COL[colKey], defs = [];
+  let body = frame(col, darkSide, defs) + leaf();
+  const c = col.base;
+  if (/^\d$/.test(kind)) {
+    const v = +kind, under = v === 6 || v === 9;
+    body += text(156, 222, 210, kind, INK, INK, 14, `opacity="0.25" transform="translate(5 8)"`) + text(152, 214, 210, kind, c, INK, 12);
+    if (under) body += rrect(104, 300, 92, 16, 8, `fill="${c}" stroke="${INK}" stroke-width="6"`);
+    body += corners((x, y) => text(x, y, 76, kind, '#fff', INK, 9) + (under ? rrect(x - 22, y + 38, 40, 9, 4.5, `fill="#fff" stroke="${INK}" stroke-width="4"`) : ''));
+  } else if (kind === 'skip') {
+    body += shadowed(o => skipIcon(150, 210, 62, 26, o || c, INK, 12)) + corners((x, y) => skipIcon(x, y, 22, 10, '#fff', INK, 7));
+  } else if (kind === 'rev') {
+    body += shadowed(o => reverseIcon(150, 210, 62, 24, o || c, INK, 12)) + corners((x, y) => reverseIcon(x, y, 22, 9, '#fff', INK, 6));
+  } else if (kind === 'd1') {
+    body += shadowed(o => miniCard(150, 210, 96, 136, -8, o || c, INK, 9)) + cornerText('+1');
+  } else if (kind === 'd2') {
+    body += shadowed(o => miniCard(128, 196, 82, 116, -14, o || c, INK, 9) + miniCard(172, 226, 82, 116, 10, o || c, INK, 9)) + cornerText('+2');
+  } else if (kind === 'd4') {
+    const cs = [[104, 186, -16], [134, 226, -6], [166, 196, 8], [196, 232, 18]];
+    body += shadowed(o => cs.map(q => miniCard(q[0], q[1], 70, 100, q[2], o || c, INK, 8)).join('')) + cornerText('+4');
+  } else if (/^d\d+$/.test(kind)) {
+    body += bigText('+' + kind.slice(1), c, 168) + cornerText('+' + kind.slice(1));
+  } else if (kind === 'flip') {
+    body += shadowed(o => miniCard(150, 214, 74, 104, -12, o || c, INK, 8) + reverseIcon(150, 214, 88, 14, o || c, INK, 10));
+    body += corners((x, y) => reverseIcon(x, y, 20, 8, '#fff', INK, 6));
+  } else if (kind === 'skipall') {
+    body += shadowed(o => skipIcon(150, 190, 54, 22, o || c, INK, 12));
+    body += text(150, 292, 58, 'ALL', c, INK, 10) + corners((x, y) => skipIcon(x, y, 20, 9, '#fff', INK, 6));
+  } else if (kind === 'discard') {
+    body += shadowed(o => miniCard(122, 170, 70, 100, -12, o || c, INK, 8) + miniCard(150, 196, 70, 100, 0, o || c, INK, 8) + miniCard(178, 222, 70, 100, 12, o || c, INK, 8));
+    body += text(150, 306, 56, 'ALL', c, INK, 10) + cornerText('ALL', 34);
+  } else if (kind === 'hit2') {
+    body += shadowed(o => burstShape(150, 214, 104, 70, 10, o || c, INK, 8));
+    body += text(150, 188, 66, 'HIT', '#fff', INK, 10) + text(150, 250, 74, '2', '#fff', INK, 10) + cornerText('HIT', 32);
+  } else if (kind === 'swap') {
+    body += shadowed(o => arrowsSwap(150, 214, 1.05, o || c, INK)) + corners((x, y) => arrowsSwap(x, y, 0.32, '#fff', INK));
+  } else if (kind === 'dare') {
+    body += shadowed(o => burstShape(150, 214, 108, 80, 12, o ? o : col.light, INK, 7));
+    body += bigText('DARE', c, 82, 214, -12) + cornerText('DARE', 28);
+  }
+  return svg(CW, CH, body, defs.join(''));
+}
+
+// Wild cards for every mode: dark body, white leaf, rainbow symbols. darkSide = UNO Flip's dark side.
+function modeWild(kind, darkSide) {
+  const col = COL.wild, defs = [];
+  let body = frame(col, darkSide, defs);
+  const rb = rainbow(defs);
+  const quad = (colors) => {
+    const clip = id('c');
+    defs.push(`<clipPath id="${clip}"><path d="${LEAF}"/></clipPath>`);
+    return `<path d="${LEAF}" fill="#000" opacity="0.3" transform="translate(4 7)"/><g clip-path="url(#${clip})">` +
+      `<rect x="40" y="70" width="110" height="140" fill="${colors[0]}"/><rect x="150" y="70" width="110" height="140" fill="${colors[3]}"/>` +
+      `<rect x="40" y="210" width="110" height="140" fill="${colors[1]}"/><rect x="150" y="210" width="110" height="140" fill="${colors[2]}"/></g>` +
+      `<path d="${LEAF}" fill="none" stroke="#fff" stroke-width="10"/><line x1="150" y1="82" x2="150" y2="338" stroke="#fff" stroke-width="6"/><line x1="52" y1="210" x2="248" y2="210" stroke="#fff" stroke-width="6"/>`;
+  };
+  const lightCols = LIGHT_KEYS.map(k => COL[k].base), darkCols = DARK_KEYS.map(k => DARK[k].base);
+  const pieCorner = (cols) => corners((x, y) => `<circle cx="${x}" cy="${y}" r="23" fill="#fff"/>` + [0, 1, 2, 3].map(i => {
+    const a0 = (180 + i * 90) * Math.PI / 180, a1 = a0 + Math.PI / 2;
+    return `<path d="M${x} ${y} L${f(x + 20 * Math.cos(a0))} ${f(y + 20 * Math.sin(a0))} A20 20 0 0 1 ${f(x + 20 * Math.cos(a1))} ${f(y + 20 * Math.sin(a1))} Z" fill="${[cols[0], cols[3], cols[2], cols[1]][i]}"/>`;
+  }).join(''));
+  if (kind === 'wild') return svg(CW, CH, body + quad(darkSide ? darkCols : lightCols) + pieCorner(darkSide ? darkCols : lightCols), defs.join(''));
+
+  body += leaf(col.light, 0.3).replace(`fill="${col.light}"`, `fill="${col.light}" opacity="0.55"`);
+  const mini = (cols) => {
+    const cs = [[104, 186, -16], [134, 226, -6], [166, 196, 8], [196, 232, 18]].slice(0, cols.length);
+    return `<g opacity="0.25" transform="translate(5 8)">` + cs.map(q => miniCard(q[0], q[1], 70, 100, q[2], INK, INK, 8)).join('') + `</g>` +
+      cs.map((q, i) => miniCard(q[0], q[1], 70, 100, q[2], cols[i], INK, 8)).join('');
+  };
+  switch (kind) {
+    case 'wd2': body += mini([COL.red.base, COL.blue.base]) + cornerText('+2'); break;
+    case 'wd4': body += mini(lightCols) + cornerText('+4'); break;
+    case 'wd6': body += burstShape(150, 214, 112, 84, 14, '#fff', INK, 6) + bigText('+6', rb, 150) + cornerText('+6'); break;
+    case 'wd10': body += burstShape(150, 214, 116, 86, 16, '#fff', INK, 6) + bigText('+10', rb, 118) + cornerText('+10', 38); break;
+    case 'wrd4': body += reverseIcon(150, 200, 64, 22, rb, INK, 12) + text(150, 300, 62, '+4', '#fff', INK, 10) + cornerText('+4'); break;
+    case 'roulette': body += wheel(150, 220, 82, lightCols) + pieCorner(lightCols); break;
+    case 'rev': body += reverseIcon(150, 210, 66, 26, rb, INK, 12) + corners((x, y) => reverseIcon(x, y, 22, 9, '#fff', INK, 6)); break;
+    case 'skip': body += skipIcon(150, 210, 64, 28, rb, INK, 12) + corners((x, y) => skipIcon(x, y, 22, 10, '#fff', INK, 7)); break;
+    case 'skip2': body += skipIcon(140, 196, 58, 24, rb, INK, 12) + `<circle cx="214" cy="276" r="34" fill="#fff" stroke="${INK}" stroke-width="7"/>` + text(214, 278, 46, '×2', INK, INK, 0) + cornerText('×2', 40); break;
+    case 'td2': body += crosshair(150, 200, 70, rb.replace('url', 'url')) + text(150, 300, 60, '+2', '#fff', INK, 10) + cornerText('+2'); break;
+    case 'swap': body += arrowsSwap(150, 214, 1.1, rb, INK) + corners((x, y) => arrowsSwap(x, y, 0.32, '#fff', INK)); break;
+    case 'hitall': body += burstShape(150, 214, 116, 84, 12, rb, INK, 8) + text(150, 190, 54, 'ALL', '#fff', INK, 10) + text(150, 246, 60, 'HIT', '#fff', INK, 10) + cornerText('HIT', 32); break;
+    case 'hitfire': body += burstShape(150, 214, 116, 70, 9, rb, INK, 8) + text(150, 190, 56, 'HIT', '#fff', INK, 10) + text(150, 246, 56, 'FIRE', '#fff', INK, 10) + cornerText('FIRE', 28); break;
+    case 'dare': body += burstShape(150, 214, 112, 84, 12, '#fff', INK, 6) + bigText('DARE', rb, 84, 214, -12) + cornerText('DARE', 28); break;
+    case 'wdc': body += mini(darkCols) + text(150, 312, 46, 'COLOR', '#fff', INK, 9) + cornerText('+?', 40); break;
+  }
+  return svg(CW, CH, body, defs.join(''));
+}
+
+function launcher() {
+  const g = id('g'), d = id('d');
+  return svg(260, 300,
+    `<ellipse cx="130" cy="282" rx="112" ry="16" fill="#000" opacity="0.35"/>` +
+    `<path d="M24 270 L48 168 L212 168 L236 270 Z" fill="url(#${g})" stroke="${INK}" stroke-width="7" stroke-linejoin="round"/>` +
+    `<path d="M40 176 Q130 -30 220 176 Z" fill="url(#${d})" stroke="${INK}" stroke-width="7" stroke-linejoin="round"/>` +
+    `<path d="M70 130 Q130 40 190 130" fill="none" stroke="#fff" stroke-width="8" opacity="0.35" stroke-linecap="round"/>` +
+    `<rect x="78" y="150" width="104" height="22" rx="8" fill="${INK}"/>` +
+    miniCard(130, 134, 60, 84, -6, COL.yellow.base, INK, 6) +
+    `<rect x="48" y="200" width="164" height="22" rx="11" fill="#fff" opacity="0.25"/>` +
+    `<circle cx="130" cy="244" r="20" fill="${COL.red.base}" stroke="${INK}" stroke-width="6"/><circle cx="124" cy="238" r="6" fill="#fff" opacity="0.6"/>`,
+    `<linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8E9BA6"/><stop offset="1" stop-color="#4A5560"/></linearGradient>` +
+    `<radialGradient id="${d}" cx="0.4" cy="0.3" r="0.8"><stop offset="0" stop-color="#FF7A6B"/><stop offset="1" stop-color="#B8131F"/></radialGradient>`);
+}
+
 // ---------- UI pieces ----------
 
 function roundRect(w, h, r, fill = '#fff') {
@@ -256,7 +435,7 @@ function softGlow(size) {
 }
 
 function colorBall(colKey) {
-  const c = COL[colKey], s = 220, g = id('g'), h = id('h');
+  const c = COL[colKey] || DARK[colKey], s = 220, g = id('g'), h = id('h');
   const defs = `<radialGradient id="${g}" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="${c.light}"/><stop offset="0.55" stop-color="${c.base}"/><stop offset="1" stop-color="${c.dark}"/></radialGradient>` +
     `<linearGradient id="${h}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>`;
   return svg(s, s, `<circle cx="110" cy="116" r="100" fill="#000" opacity="0.28"/>` +
@@ -635,13 +814,23 @@ function main() {
   const only = process.argv[2];
 
   if (!only || only === 'cards') {
-    const cards = [];
-    ORDER.forEach(c => { for (let v = 0; v <= 12; v++) cards.push({ name: `card_${c}_${v}`, svg: v <= 9 ? numberCard(c, v) : actionCard(c, v) }); });
-    cards.push({ name: 'card_wild', svg: wildCard(false) });
-    cards.push({ name: 'card_wild4', svg: wildCard(true) });
-    cards.push({ name: 'card_back', svg: cardBack() });
-    cards.push({ name: 'card_mask', svg: cardSilhouette('#fff', 0, 0, 1) });
-    renderAtlas('cards', cards, 13 * 304 + 4, 4);
+    // Light-side colours (every mode) + back/mask.
+    const a = [];
+    const lightTokens = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'skip', 'rev', 'd1', 'd2', 'd4', 'flip', 'skipall', 'discard', 'hit2', 'swap', 'dare'];
+    LIGHT_KEYS.forEach(c => lightTokens.forEach(t => a.push({ name: `c_${c}_${t}`, svg: modeCard(c, t, false) })));
+    a.push({ name: 'card_back', svg: cardBack() });
+    a.push({ name: 'card_mask', svg: cardSilhouette('#fff', 0, 0, 1) });
+    renderAtlas('cards_a', a, 13 * 304 + 4, 4);
+
+    // UNO Flip dark side + every wild card.
+    const b = [];
+    const darkTokens = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'd5', 'rev', 'skipall', 'flip'];
+    DARK_KEYS.forEach(c => darkTokens.forEach(t => b.push({ name: `c_${c}_${t}`, svg: modeCard(c, t, true) })));
+    ['wild', 'wd2', 'wd4', 'wd6', 'wd10', 'wrd4', 'roulette', 'rev', 'skip', 'skip2', 'td2', 'swap', 'hitall', 'hitfire', 'dare']
+      .forEach(t => b.push({ name: `w_${t}`, svg: modeWild(t, false) }));
+    b.push({ name: 'wd_wild', svg: modeWild('wild', true) });
+    b.push({ name: 'wd_wdc', svg: modeWild('wdc', true) });
+    renderAtlas('cards_b', b, 13 * 304 + 4, 4);
   }
 
   if (!only || only === 'ui') {
@@ -665,6 +854,10 @@ function main() {
       { name: 'ball_yellow', svg: colorBall('yellow') },
       { name: 'ball_green', svg: colorBall('green') },
       { name: 'ball_blue', svg: colorBall('blue') },
+      { name: 'ball_pink', svg: colorBall('pink') },
+      { name: 'ball_teal', svg: colorBall('teal') },
+      { name: 'ball_orange', svg: colorBall('orange') },
+      { name: 'ball_purple', svg: colorBall('purple') },
       { name: 'uno_burst', svg: burst(520, 320, 14, 1, 0.78, '#FF5A4E', '#C81E2B', 'UNO!', 150) },
       { name: 'vs', svg: vsBadge() },
       { name: 'ribbon_gold', svg: ribbon('#FFC21A', '#C78100') },
@@ -674,6 +867,9 @@ function main() {
       { name: 'fx_reverse', svg: fxReverse() },
       { name: 'coin', svg: coin() },
       { name: 'crown', svg: crown() },
+      { name: 'launcher', svg: launcher() },
+      { name: 'icon_info', svg: svg(128, 128, `<circle cx="64" cy="64" r="52" fill="none" stroke="#fff" stroke-width="11"/><circle cx="64" cy="38" r="8" fill="#fff"/><rect x="56" y="54" width="16" height="44" rx="6" fill="#fff"/>`) },
+      { name: 'icon_flip', svg: svg(128, 128, `<g fill="none" stroke="#fff" stroke-width="9" stroke-linejoin="round"><rect x="24" y="30" width="46" height="66" rx="8" transform="rotate(-12 47 63)"/><rect x="58" y="32" width="46" height="66" rx="8" fill="#fff" transform="rotate(12 81 65)"/></g>`) },
     ];
     for (const [k, v] of Object.entries(ICONS)) ui.push({ name: 'icon_' + k, svg: v });
     AVATARS.forEach((a, i) => ui.push({ name: 'avatar_' + i, svg: a }));
