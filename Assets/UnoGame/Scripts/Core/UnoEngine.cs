@@ -18,6 +18,7 @@ namespace UnoGame.Core
         public readonly bool Stacking;
         public List<int>[] Hands;
         public readonly int[] Skips;
+        public readonly bool[] Out;   // knocked out (No Mercy 25 cards) or left a 3+ player game
         public List<int> DrawPile = new List<int>();   // top = last element
         public List<int> Discard = new List<int>();    // top = last element
         public int Side;            // UNO Flip: 0 light, 1 dark
@@ -50,6 +51,7 @@ namespace UnoGame.Core
             Hands = new List<int>[players];
             for (int i = 0; i < players; i++) Hands[i] = new List<int>();
             Skips = new int[players];
+            Out = new bool[players];
         }
 
         public int RandInt(int n) => (int)System.Math.Floor(Rng.Next() * n);
@@ -75,7 +77,33 @@ namespace UnoGame.Core
         public Face FaceOf(int id) { var d = Deck[id]; return Side == 1 && d.HasB ? d.B : d.A; }
         public Face OtherFace(int id) { var d = Deck[id]; return Side == 1 ? d.A : d.B; }
         public int Top => Discard[Discard.Count - 1];
-        public int Next(int p) => (p + Dir + N) % N;
+        /// <summary>Next player still in the game, in the direction of play.</summary>
+        public int Next(int p)
+        {
+            int t = p;
+            for (int i = 0; i < N; i++)
+            {
+                t = (t + Dir + N) % N;
+                if (!Out[t]) return t;
+            }
+            return t;
+        }
+
+        public int ActiveCount()
+        {
+            int c = 0;
+            for (int i = 0; i < N; i++) if (!Out[i]) c++;
+            return c;
+        }
+
+        /// <summary>3+ players: Swap / Trade Hands, the No Mercy 7 and Targeted Draw let the player pick who.</summary>
+        public bool NeedsTarget(Face f)
+        {
+            if (ActiveCount() <= 2) return false;
+            return f.K == Kind.Swap || f.K == Kind.TargetDraw || (Cfg.SevenZero && f.K == Kind.Num && f.N == 7);
+        }
+
+        public bool ValidTarget(int p, int t) => t >= 0 && t < N && t != p && !Out[t];
 
         bool IsPlain(Face f) => f.K == Kind.Num || (Cfg.AllWild && f.K == Kind.Wild);
 
@@ -239,19 +267,55 @@ namespace UnoGame.Core
             Emit(ev);
         }
 
+        /// <summary>No Mercy 0 with 3+ players: everyone passes their hand on in the direction of play.</summary>
+        void RotateHands(int p)
+        {
+            var order = new List<int> { p };
+            for (int t = Next(p); t != p && order.Count < N; t = Next(t)) order.Add(t);
+            var moved = new List<int>[order.Count];
+            for (int i = 0; i < order.Count; i++) moved[i] = Hands[order[i]];
+            for (int i = 0; i < order.Count; i++) Hands[order[(i + 1) % order.Count]] = moved[i];
+            var ev = Ev.Of("rotate", p);
+            ev.dir = Dir;
+            Emit(ev);
+        }
+
+        /// <summary>
+        /// A player leaves a game of 3+: their cards go to the bottom of the draw pile and play goes on.
+        /// Returns true when only one player is left (who then wins).
+        /// </summary>
+        bool Eliminate(int p, string reason)
+        {
+            Out[p] = true;
+            Skips[p] = 0;
+            var cards = Hands[p];
+            Hands[p] = new List<int>();
+            Shuffle(cards);
+            DrawPile.InsertRange(0, cards);
+            var ev = Ev.Of("out", p);
+            ev.n = cards.Count;
+            ev.reason = reason;
+            Emit(ev);
+            if (ActiveCount() > 1) return false;
+            Finish(Next(p), reason);
+            return true;
+        }
+
         bool CheckMercy()
         {
             if (Cfg.Mercy <= 0 || Over) return false;
             for (int i = 0; i < N; i++)
             {
-                if (Hands[i].Count >= Cfg.Mercy)
+                if (Out[i] || Hands[i].Count < Cfg.Mercy) continue;
+                var ev = Ev.Of("mercy", i);
+                ev.n = Hands[i].Count;
+                Emit(ev);
+                if (ActiveCount() <= 2)
                 {
-                    var ev = Ev.Of("mercy", i);
-                    ev.n = Hands[i].Count;
-                    Emit(ev);
-                    Finish((i + 1) % N, "mercy");
+                    Finish(Next(i), "mercy");
                     return true;
                 }
+                if (Eliminate(i, "mercy")) return true;
             }
             return false;
         }
@@ -259,7 +323,7 @@ namespace UnoGame.Core
         bool CheckStalemate(bool idle)
         {
             IdleTurns = idle ? IdleTurns + 1 : 0;
-            if (IdleTurns < N) return false;
+            if (IdleTurns < ActiveCount()) return false;
             FinishByCount("stalemate");
             return true;
         }
@@ -270,6 +334,7 @@ namespace UnoGame.Core
             for (int i = 0; i < N; i++)
             {
                 int p = (Turn + i) % N;
+                if (Out[p]) continue;
                 int count = Hands[p].Count, pts = 0;
                 foreach (int id in Hands[p]) pts += Decks.Points(Mode, FaceOf(id), Side);
                 if (count < bestCount || (count == bestCount && pts < bestPts)) { best = p; bestCount = count; bestPts = pts; }
@@ -322,7 +387,8 @@ namespace UnoGame.Core
         }
 
         /// <param name="forgive">The player forgot UNO but nobody caught it (bot opponents don't always notice).</param>
-        public string Play(int p, int id, int chosen, bool uno, bool forgive = false)
+        /// <param name="target">Who a Swap / Trade Hands / No Mercy 7 / Targeted Draw goes to (3+ players; defaults to the next player).</param>
+        public string Play(int p, int id, int chosen, bool uno, bool forgive = false, int target = -1)
         {
             if (Over) return "game over";
             if (p != Turn) return "not your turn";
@@ -372,12 +438,19 @@ namespace UnoGame.Core
             }
 
             int t = Next(p);
+            int tgt = NeedsTarget(f) && ValidTarget(p, target) ? target : t;
             switch (f.K)
             {
                 case Kind.Skip:
-                case Kind.SkipAll:
                     Emit(Ev.Of("skip", t));
                     Skips[t]++;
+                    break;
+                case Kind.SkipAll:
+                    for (int i = t, guard = 0; i != p && guard < N; i = Next(i), guard++)
+                    {
+                        Emit(Ev.Of("skip", i));
+                        Skips[i]++;
+                    }
                     break;
                 case Kind.SkipTwo:
                 {
@@ -437,20 +510,21 @@ namespace UnoGame.Core
                     FlipDeck();
                     break;
                 case Kind.TargetDraw:
-                    ForcedDraw(t, f.N);
+                    ForcedDraw(tgt, f.N);
                     break;
                 case Kind.Swap:
-                    SwapHands(p, t);
+                    SwapHands(p, tgt);
                     break;
                 case Kind.Num:
-                    if (swaps) SwapHands(p, t);
+                    if (swaps && f.N == 0 && ActiveCount() > 2) RotateHands(p);
+                    else if (swaps) SwapHands(p, tgt);
                     break;
                 case Kind.Hit:
                     for (int i = 0; i < f.N && !Over; i++) HitLauncher(t);
                     Skips[t]++;
                     break;
                 case Kind.HitAll:
-                    for (int i = 0; i < N; i++) if (i != p) HitLauncher(i);
+                    for (int i = 0; i < N; i++) if (i != p && !Out[i]) HitLauncher(i);
                     break;
                 case Kind.HitFire:
                     for (int guard = 0; guard < 25; guard++)
@@ -475,7 +549,7 @@ namespace UnoGame.Core
             for (int i = 0; i < N; i++)
             {
                 int w = (p + i) % N;
-                if (Hands[w].Count != 0) continue;
+                if (Out[w] || Hands[w].Count != 0) continue;
                 if (PendingKind == "stack" && Pending > 0)
                 {
                     int victim = Next(w);
@@ -525,6 +599,7 @@ namespace UnoGame.Core
             else got = DrawCards(p, 1);
             Emit(DrawEvent(p, got, false));
             if (CheckMercy()) return null;
+            if (Out[p]) { EndTurn(p); return null; }
             if (CheckStalemate(deckEmpty && got.Count == 0)) return null;
             int last = got.Count > 0 ? got[got.Count - 1] : -1;
             if (last >= 0 && IsPlayable(p, last))
@@ -613,20 +688,45 @@ namespace UnoGame.Core
             Emit(ev);
         }
 
+        /// <summary>A player leaves or idles out. Two players left: the other one wins. More: the game goes on without them.</summary>
         public void Forfeit(int loser, string reason)
         {
-            if (Over) return;
-            Finish((loser + 1) % N, string.IsNullOrEmpty(reason) ? "forfeit" : reason);
+            if (Over || Out[loser]) return;
+            if (string.IsNullOrEmpty(reason)) reason = "forfeit";
+            if (ActiveCount() <= 2)
+            {
+                int w = (loser + 1) % N;
+                for (int g = 0; g < N && (w == loser || Out[w]); g++) w = (w + 1) % N;
+                Finish(w, reason);
+                return;
+            }
+            bool wasTurn = Turn == loser;
+            if (Eliminate(loser, reason)) return;
+            if (wasTurn)
+            {
+                Pending = 0;
+                LastDraw = 0;
+                PendingKind = "";
+                DareAmount = 0;
+                EndTurn(loser);
+            }
+        }
+
+        /// <summary>UNO Flip: the other side of every opponent's cards, seat by seat from the one after you.</summary>
+        List<int> OthersFaces(int seat)
+        {
+            var r = new List<int>();
+            for (int k = 1; k < N; k++) foreach (int id in Hands[(seat + k) % N]) r.Add(OtherFace(id).Code);
+            return r;
         }
 
         public St View(int seat)
         {
             bool mine = Turn == seat;
-            int opp = (seat + 1) % N;
             var counts = new int[N];
-            for (int i = 0; i < N; i++) counts[i] = Hands[i].Count;
-            var oppFaces = new List<int>();
-            if (Cfg.Flip) foreach (int id in Hands[opp]) oppFaces.Add(OtherFace(id).Code);
+            var outs = new int[N];
+            for (int i = 0; i < N; i++) { counts[i] = Hands[i].Count; outs[i] = Out[i] ? 1 : 0; }
+            var oppFaces = Cfg.Flip ? OthersFaces(seat) : new List<int>();
             return new St
             {
                 you = seat,
@@ -634,6 +734,7 @@ namespace UnoGame.Core
                 side = Side,
                 hand = Hands[seat].ToArray(),
                 counts = counts,
+                @out = outs,
                 top = Top,
                 color = Color,
                 dir = Dir,

@@ -16,7 +16,7 @@ namespace UnoGame.Core
     [Serializable]
     public class Ev
     {
-        public string k;      // deal, start, turn, play, uno, unoPen, reverse, skip, stack, draw, reshuffle, win
+        public string k;      // deal, start, turn, play, uno, unoPen, reverse, skip, stack, draw, reshuffle, swap, rotate, out, win
         public int p;         // player seat
         public int n;         // number of cards / stack size
         public int card;      // card id
@@ -24,7 +24,7 @@ namespace UnoGame.Core
         public int[] cards;   // cards dealt/drawn (only filled in for the receiving player)
         public int dir;       // direction after a reverse
         public int pts;       // points for the winner
-        public string reason; // win reason: cards, forfeit, left, idle
+        public string reason; // win/out reason: cards, mercy, forfeit, left, idle
         public int forced;    // 1 when a draw was a penalty (stack, +2/+4)
 
         public static Ev Of(string k, int p = 0) => new Ev { k = k, p = p, cards = Array.Empty<int>() };
@@ -46,6 +46,7 @@ namespace UnoGame.Core
         public int side;        // UNO Flip: 0 light, 1 dark
         public int[] hand;
         public int[] counts;
+        public int[] @out;      // 1 for players who are out of the game (No Mercy knockout, left a 3+ player game)
         public int top;
         public int color;       // 4 = anything goes
         public int dir;
@@ -58,7 +59,7 @@ namespace UnoGame.Core
         public int drawn;
         public int[] legal;     // cards you may play right now (server-authoritative)
         public int pile;
-        public int[] oppFaces;  // UNO Flip: face codes of the other side of the opponent's cards
+        public int[] oppFaces;  // UNO Flip: other side of every opponent's cards, seat by seat from the one after you
         public int pileFace;    // UNO Flip: face code of the other side of the draw pile's top card
         public int over;
         public int winner;
@@ -77,6 +78,7 @@ namespace UnoGame.Core
         public string match;
         public string mode;
         public int seat;
+        public int size;      // queued: table size being filled
         public PlayerInfo[] players;
         public Ev[] ev;
         public St st;

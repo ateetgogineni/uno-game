@@ -23,6 +23,7 @@ namespace UnoGame.Core
             public int Color;
             public bool Uno;
             public bool Ok;
+            public int Target;   // who a swap / targeted draw goes to (-1: the next player)
         }
 
         public static int ClampLevel(int level) => level < Easy || level > Hard ? Hard : level;
@@ -46,13 +47,38 @@ namespace UnoGame.Core
         static bool IsSwap(UnoEngine g, Face f) =>
             f.K == Kind.Swap || (g.Cfg.SevenZero && f.K == Kind.Num && (f.N == 7 || f.N == 0));
 
+        /// <summary>
+        /// The opponent closest to winning (fewest cards; ties go to whoever plays first from p).
+        /// Used as the target of swaps and targeted draws; with two players it is simply the opponent.
+        /// </summary>
+        public static int FewestCards(UnoEngine g, int p)
+        {
+            int best = -1;
+            for (int t = g.Next(p), guard = 0; t != p && guard < g.N; t = g.Next(t), guard++)
+                if (best < 0 || g.Hands[t].Count < g.Hands[best].Count) best = t;
+            return best;
+        }
+
+        /// <summary>The player who passes their hand to p when a No Mercy 0 rotates hands (the one before p).</summary>
+        static int PreviousPlayer(UnoEngine g, int p)
+        {
+            int prev = p;
+            for (int t = g.Next(p), guard = 0; t != p && guard < g.N; t = g.Next(t), guard++) prev = t;
+            return prev;
+        }
+
         static double ScoreCard(UnoEngine g, int p, int id, int oppCount)
         {
             var f = g.FaceOf(id);
             var hand = g.Hands[p];
             int sameColor = 0;
             foreach (int h in hand) if (h != id && g.FaceOf(h).C == f.C) sameColor++;
-            if (IsSwap(g, f)) return hand.Count - 1 > oppCount ? 45 : -20;
+            if (IsSwap(g, f))
+            {
+                bool rotates = f.K == Kind.Num && f.N == 0 && g.ActiveCount() > 2;
+                int from = rotates ? PreviousPlayer(g, p) : FewestCards(g, p);
+                return hand.Count - 1 > g.Hands[from].Count ? 45 : -20;
+            }
             if (g.Cfg.AllWild)
             {
                 if (f.K == Kind.WildDraw) return oppCount <= 3 ? 40 : 16;
@@ -82,13 +108,13 @@ namespace UnoGame.Core
             }
         }
 
-        static Move Simple(MoveType t) => new Move { Type = t, Card = -1, Color = -1 };
+        static Move Simple(MoveType t) => new Move { Type = t, Card = -1, Color = -1, Target = -1 };
 
         public static Move Choose(UnoEngine g, int p, int level = Hard)
         {
             level = ClampLevel(level);
-            if (g.PendingKind == "roulette") return new Move { Type = MoveType.Roulette, Card = -1, Color = g.RandInt(4) };
-            if (g.PendingKind == "dare") return new Move { Type = MoveType.Dare, Card = -1, Color = -1, Ok = g.Rng.Next() < DareSuccess[level] };
+            if (g.PendingKind == "roulette") return new Move { Type = MoveType.Roulette, Card = -1, Color = g.RandInt(4), Target = -1 };
+            if (g.PendingKind == "dare") return new Move { Type = MoveType.Dare, Card = -1, Color = -1, Ok = g.Rng.Next() < DareSuccess[level], Target = -1 };
 
             var hand = g.Hands[p];
             var legal = g.LegalMoves(p);
@@ -135,14 +161,15 @@ namespace UnoGame.Core
             if (f.IsWild && !g.Cfg.AllWild)
                 color = level == Easy && g.Rng.Next() < 0.5 ? g.RandInt(4) : BestColor(g, hand, pick);
             bool uno = hand.Count == 2 && g.Rng.Next() < UnoChance[level];
-            return new Move { Type = MoveType.Play, Card = pick, Color = color, Uno = uno };
+            int target = g.NeedsTarget(f) ? FewestCards(g, p) : -1;
+            return new Move { Type = MoveType.Play, Card = pick, Color = color, Uno = uno, Target = target };
         }
 
         public static string Apply(UnoEngine g, int p, Move m)
         {
             switch (m.Type)
             {
-                case MoveType.Play: return g.Play(p, m.Card, m.Color, m.Uno);
+                case MoveType.Play: return g.Play(p, m.Card, m.Color, m.Uno, false, m.Target);
                 case MoveType.Draw: return g.Draw(p);
                 case MoveType.Roulette: return g.Roulette(p, m.Color);
                 case MoveType.Dare: return g.Dare(p, m.Ok);
