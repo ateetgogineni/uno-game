@@ -3,24 +3,34 @@ using System.Collections.Generic;
 namespace UnoGame.Core
 {
     /// <summary>
-    /// UNO rules engine, a line-by-line port of Server/src/engine.js (the online authority).
-    /// Used for offline games against a bot. Keep both in sync: Checks.ParityDump compares them.
-    /// Rules: official 108-card deck; Wild Draw Four only without a card of the current colour;
-    /// two players: Skip and Reverse give you another turn; forgetting UNO costs 2 cards;
-    /// optional +2/+4 stacking (on by default, as in the reference game).
+    /// UNO rules engine for every game mode, a line-by-line port of Server/src/engine.js (the online
+    /// authority). Used for offline games against a bot. Keep both in sync: Checks.ParityDump compares them.
     /// </summary>
     public sealed class UnoEngine
     {
+        public const int MaxMoves = 1000;
+
         public readonly int N;
+        public readonly string Mode;
+        public readonly ModeRules Cfg;
+        public readonly CardDef[] Deck;
         public readonly UnoRng Rng;
         public readonly bool Stacking;
-        public readonly List<int>[] Hands;
+        public List<int>[] Hands;
+        public readonly int[] Skips;
         public List<int> DrawPile = new List<int>();   // top = last element
         public List<int> Discard = new List<int>();    // top = last element
-        public int Color;
+        public int Side;            // UNO Flip: 0 light, 1 dark
+        public int Color;           // 4 = anything goes (All Wild, or a wild flipped to the top)
         public int Dir = 1;
         public int Turn;
         public int Pending;
+        public int LastDraw;
+        public string PendingKind = "";   // "", "stack", "roulette", "dare"
+        public int DareAmount;
+        public int LauncherCharge;
+        public int IdleTurns;
+        public int Moves;
         public bool HasDrawn;
         public int DrawnCard = -1;
         public bool Over;
@@ -29,13 +39,17 @@ namespace UnoGame.Core
 
         readonly List<Ev> events = new List<Ev>();
 
-        public UnoEngine(int players, int seed, bool stacking)
+        public UnoEngine(int players, int seed, bool stacking, string mode = "classic")
         {
+            Mode = Decks.Normalize(mode);
+            Cfg = Decks.Rules(Mode);
+            Deck = Decks.For(Mode);
             N = players;
             Rng = new UnoRng(seed);
-            Stacking = stacking;
+            Stacking = Cfg.Stack == "classic" ? stacking : Cfg.Stack != null;
             Hands = new List<int>[players];
             for (int i = 0; i < players; i++) Hands[i] = new List<int>();
+            Skips = new int[players];
         }
 
         public int RandInt(int n) => (int)System.Math.Floor(Rng.Next() * n);
@@ -58,13 +72,24 @@ namespace UnoGame.Core
             return e;
         }
 
+        public Face FaceOf(int id) { var d = Deck[id]; return Side == 1 && d.HasB ? d.B : d.A; }
+        public Face OtherFace(int id) { var d = Deck[id]; return Side == 1 ? d.A : d.B; }
         public int Top => Discard[Discard.Count - 1];
         public int Next(int p) => (p + Dir + N) % N;
 
+        bool IsPlain(Face f) => f.K == Kind.Num || (Cfg.AllWild && f.K == Kind.Wild);
+
+        static int Pop(List<int> list)
+        {
+            int v = list[list.Count - 1];
+            list.RemoveAt(list.Count - 1);
+            return v;
+        }
+
         public void Start(int firstPlayer = -1)
         {
-            var ids = new List<int>(Cards.DeckSize);
-            for (int i = 0; i < Cards.DeckSize; i++) ids.Add(i);
+            var ids = new List<int>(Deck.Length);
+            for (int i = 0; i < Deck.Length; i++) ids.Add(i);
             Shuffle(ids);
             DrawPile = ids;
             for (int r = 0; r < Cards.HandSize; r++)
@@ -77,15 +102,15 @@ namespace UnoGame.Core
                 Emit(ev);
             }
 
-            // The first discard is always a number card: action and wild cards go back into the pile.
+            // The first discard is always a card without an effect: others go back into the pile.
             int first = Pop(DrawPile);
-            while (Cards.ValueOf(first) > 9)
+            while (!IsPlain(FaceOf(first)))
             {
                 DrawPile.Insert(RandInt(DrawPile.Count), first);
                 first = Pop(DrawPile);
             }
             Discard.Add(first);
-            Color = Cards.ColorOf(first);
+            Color = FaceOf(first).C;
             var start = Ev.Of("start");
             start.card = first;
             start.color = Color;
@@ -95,26 +120,35 @@ namespace UnoGame.Core
             Emit(Ev.Of("turn", Turn));
         }
 
-        static int Pop(List<int> list)
+        static bool SameSymbol(Face f, Face t)
         {
-            int v = list[list.Count - 1];
-            list.RemoveAt(list.Count - 1);
-            return v;
+            if (f.K != t.K) return false;
+            return (f.K == Kind.Num || f.K == Kind.Draw || f.K == Kind.WildDraw || f.K == Kind.Hit) ? f.N == t.N : true;
         }
 
         public bool IsPlayable(int p, int id)
         {
-            int v = Cards.ValueOf(id), c = Cards.ColorOf(id);
-            if (Pending > 0) return v == Cards.Draw2 || v == Cards.Wild4;
-            if (v == Cards.Wild) return true;
-            if (v == Cards.Wild4)
+            var f = FaceOf(id);
+            if (PendingKind == "stack")
             {
-                var hand = Hands[p];
-                for (int i = 0; i < hand.Count; i++)
-                    if (hand[i] != id && Cards.ColorOf(hand[i]) == Color) return false;
+                if (!f.IsDrawCard) return false;
+                return Cfg.Stack == "nomercy" ? f.N >= LastDraw : true;
+            }
+            if (PendingKind != "") return false;
+            if (Cfg.AllWild) return true;
+            if (f.IsWild)
+            {
+                if (Cfg.RestrictWildDraw && (f.K == Kind.WildDraw || f.K == Kind.WildDrawColor))
+                {
+                    // Official rule: only when you hold no other card of the current colour.
+                    var hand = Hands[p];
+                    for (int i = 0; i < hand.Count; i++)
+                        if (hand[i] != id && FaceOf(hand[i]).C == Color) return false;
+                }
                 return true;
             }
-            return c == Color || v == Cards.ValueOf(Top);
+            if (Color == Face.WildColor) return true;
+            return f.C == Color || SameSymbol(f, FaceOf(Top));
         }
 
         public List<int> LegalMoves(int p)
@@ -135,11 +169,31 @@ namespace UnoGame.Core
             var got = new List<int>();
             for (int i = 0; i < k; i++)
             {
-                if (DrawPile.Count == 0) Reshuffle();
-                if (DrawPile.Count == 0) break;
-                int id = Pop(DrawPile);
+                int id = DrawOne();
+                if (id < 0) break;
                 Hands[p].Add(id);
                 got.Add(id);
+            }
+            return got;
+        }
+
+        int DrawOne()
+        {
+            if (DrawPile.Count == 0) Reshuffle();
+            if (DrawPile.Count == 0) return -1;
+            return Pop(DrawPile);
+        }
+
+        List<int> DrawUntil(int p, System.Func<int, bool> test)
+        {
+            var got = new List<int>();
+            for (int guard = 0; guard < 60; guard++)
+            {
+                int id = DrawOne();
+                if (id < 0) break;
+                Hands[p].Add(id);
+                got.Add(id);
+                if (test(id)) break;
             }
             return got;
         }
@@ -157,13 +211,114 @@ namespace UnoGame.Core
             Emit(ev);
         }
 
-        Ev DrawEvent(int p, List<int> got, bool forced)
+        List<int> HitLauncher(int p)
+        {
+            double chance = System.Math.Min(0.85, 0.22 + 0.16 * LauncherCharge);
+            var got = new List<int>();
+            if (Rng.Next() < chance)
+            {
+                int count = 1 + RandInt(4) + (RandInt(3) == 0 ? 2 : 0);
+                LauncherCharge = 0;
+                got = DrawCards(p, count);
+            }
+            else LauncherCharge++;
+            var ev = Ev.Of("launch", p);
+            ev.n = got.Count;
+            ev.cards = got.ToArray();
+            Emit(ev);
+            return got;
+        }
+
+        void SwapHands(int a, int b)
+        {
+            var t = Hands[a];
+            Hands[a] = Hands[b];
+            Hands[b] = t;
+            var ev = Ev.Of("swap", a);
+            ev.n = b;
+            Emit(ev);
+        }
+
+        bool CheckMercy()
+        {
+            if (Cfg.Mercy <= 0 || Over) return false;
+            for (int i = 0; i < N; i++)
+            {
+                if (Hands[i].Count >= Cfg.Mercy)
+                {
+                    var ev = Ev.Of("mercy", i);
+                    ev.n = Hands[i].Count;
+                    Emit(ev);
+                    Finish((i + 1) % N, "mercy");
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool CheckStalemate(bool idle)
+        {
+            IdleTurns = idle ? IdleTurns + 1 : 0;
+            if (IdleTurns < N) return false;
+            FinishByCount("stalemate");
+            return true;
+        }
+
+        void FinishByCount(string reason)
+        {
+            int best = Turn, bestCount = int.MaxValue, bestPts = int.MaxValue;
+            for (int i = 0; i < N; i++)
+            {
+                int p = (Turn + i) % N;
+                int count = Hands[p].Count, pts = 0;
+                foreach (int id in Hands[p]) pts += Decks.Points(Mode, FaceOf(id), Side);
+                if (count < bestCount || (count == bestCount && pts < bestPts)) { best = p; bestCount = count; bestPts = pts; }
+            }
+            Finish(best, reason);
+        }
+
+        void EndTurn(int p)
+        {
+            if (++Moves >= MaxMoves) { FinishByCount("limit"); return; }
+            int t = Next(p);
+            for (int guard = 0; Skips[t] > 0 && guard < 50; guard++)
+            {
+                Skips[t]--;
+                t = Next(t);
+            }
+            Turn = t;
+            HasDrawn = false;
+            DrawnCard = -1;
+            Emit(Ev.Of("turn", Turn));
+        }
+
+        List<int> ForcedDraw(int t, int amount)
+        {
+            var got = DrawCards(t, amount);
+            Emit(DrawEvent(t, got, true));
+            return got;
+        }
+
+        static Ev DrawEvent(int p, List<int> got, bool forced)
         {
             var ev = Ev.Of("draw", p);
             ev.n = got.Count;
             ev.cards = got.ToArray();
             ev.forced = forced ? 1 : 0;
             return ev;
+        }
+
+        void FlipDeck()
+        {
+            Side ^= 1;
+            Discard.Reverse();
+            DrawPile.Reverse();
+            Color = FaceOf(Top).C;
+            var ev = Ev.Of("flip");
+            ev.n = Side;
+            ev.card = Top;
+            ev.color = Color;
+            Emit(ev);
         }
 
         /// <param name="forgive">The player forgot UNO but nobody caught it (bot opponents don't always notice).</param>
@@ -176,12 +331,14 @@ namespace UnoGame.Core
             if (idx < 0) return "card not in hand";
             if (HasDrawn && id != DrawnCard) return "only the drawn card can be played";
             if (!IsPlayable(p, id)) return "card cannot be played";
-            int v = Cards.ValueOf(id), c = Cards.ColorOf(id);
-            if (c == Cards.WildColor && !(chosen >= 0 && chosen <= 3)) return "choose a colour";
+            var f = FaceOf(id);
+            bool needsColor = f.IsWild && !Cfg.AllWild;
+            if (needsColor && !(chosen >= 0 && chosen <= 3)) return "choose a colour";
 
             hand.RemoveAt(idx);
             Discard.Add(id);
-            Color = c == Cards.WildColor ? chosen : c;
+            IdleTurns = 0;
+            Color = f.IsWild ? (Cfg.AllWild ? Face.WildColor : chosen) : f.C;
             HasDrawn = false;
             DrawnCard = -1;
             var play = Ev.Of("play", p);
@@ -189,7 +346,19 @@ namespace UnoGame.Core
             play.color = Color;
             Emit(play);
 
-            if (hand.Count == 1)
+            if (f.K == Kind.DiscardAll)
+            {
+                var extra = hand.FindAll(h => FaceOf(h).C == f.C);
+                foreach (int h in extra) hand.Remove(h);
+                Discard.InsertRange(Discard.Count - 1, extra);
+                var ev = Ev.Of("discardAll", p);
+                ev.n = extra.Count;
+                ev.cards = extra.ToArray();
+                Emit(ev);
+            }
+
+            bool swaps = f.K == Kind.Swap || (Cfg.SevenZero && f.K == Kind.Num && (f.N == 7 || f.N == 0));
+            if (hand.Count == 1 && !swaps)
             {
                 if (uno) Emit(Ev.Of("uno", p));
                 else if (!forgive)
@@ -202,53 +371,124 @@ namespace UnoGame.Core
                 }
             }
 
-            bool again = false; // 2-player Skip/Reverse: the same player goes again
-            if (v == Cards.Reverse)
+            int t = Next(p);
+            switch (f.K)
             {
-                Dir = -Dir;
-                var ev = Ev.Of("reverse");
-                ev.dir = Dir;
-                Emit(ev);
-                if (N == 2) again = true;
-            }
-            else if (v == Cards.Skip)
-            {
-                Emit(Ev.Of("skip", Next(p)));
-                again = true;
-            }
-            else if (v == Cards.Draw2 || v == Cards.Wild4)
-            {
-                int amount = v == Cards.Draw2 ? 2 : 4;
-                if (Stacking)
+                case Kind.Skip:
+                case Kind.SkipAll:
+                    Emit(Ev.Of("skip", t));
+                    Skips[t]++;
+                    break;
+                case Kind.SkipTwo:
                 {
-                    Pending += amount;
-                    var ev = Ev.Of("stack");
-                    ev.n = Pending;
+                    var ev = Ev.Of("skip", t);
+                    ev.n = 2;
                     Emit(ev);
+                    Skips[t] += 2;
+                    break;
                 }
-                else
+                case Kind.Reverse:
                 {
-                    int t = Next(p);
-                    Emit(DrawEvent(t, DrawCards(t, amount), true));
-                    again = true;
+                    Dir = -Dir;
+                    var ev = Ev.Of("reverse");
+                    ev.dir = Dir;
+                    Emit(ev);
+                    if (N == 2) Skips[t]++;
+                    break;
+                }
+                case Kind.Draw:
+                case Kind.WildDraw:
+                case Kind.WildRevDraw:
+                    if (f.K == Kind.WildRevDraw)
+                    {
+                        Dir = -Dir;
+                        var ev = Ev.Of("reverse");
+                        ev.dir = Dir;
+                        Emit(ev);
+                    }
+                    if (Stacking)
+                    {
+                        Pending += f.N;
+                        LastDraw = f.N;
+                        PendingKind = "stack";
+                        var ev = Ev.Of("stack");
+                        ev.n = Pending;
+                        Emit(ev);
+                    }
+                    else
+                    {
+                        ForcedDraw(Next(p), f.N);
+                        Skips[Next(p)]++;
+                    }
+                    break;
+                case Kind.WildDrawColor:
+                {
+                    int want = Color;
+                    var got = DrawUntil(t, h => FaceOf(h).C == want);
+                    Emit(DrawEvent(t, got, true));
+                    Skips[t]++;
+                    break;
+                }
+                case Kind.Roulette:
+                    PendingKind = "roulette";
+                    Emit(Ev.Of("roulettePending", t));
+                    break;
+                case Kind.Flip:
+                    FlipDeck();
+                    break;
+                case Kind.TargetDraw:
+                    ForcedDraw(t, f.N);
+                    break;
+                case Kind.Swap:
+                    SwapHands(p, t);
+                    break;
+                case Kind.Num:
+                    if (swaps) SwapHands(p, t);
+                    break;
+                case Kind.Hit:
+                    for (int i = 0; i < f.N && !Over; i++) HitLauncher(t);
+                    Skips[t]++;
+                    break;
+                case Kind.HitAll:
+                    for (int i = 0; i < N; i++) if (i != p) HitLauncher(i);
+                    break;
+                case Kind.HitFire:
+                    for (int guard = 0; guard < 25; guard++)
+                        if (HitLauncher(t).Count > 0 || DrawPile.Count + Discard.Count <= 1) break;
+                    Skips[t]++;
+                    break;
+                case Kind.Dare:
+                case Kind.WildDare:
+                {
+                    PendingKind = "dare";
+                    DareAmount = f.N;
+                    var ev = Ev.Of("darePending", t);
+                    ev.n = f.N;
+                    Emit(ev);
+                    break;
                 }
             }
 
-            if (hand.Count == 0)
+            if (CheckMercy()) return null;
+
+            // Someone with no cards left wins (a swap can hand the win to the other player).
+            for (int i = 0; i < N; i++)
             {
-                if (Pending > 0)
+                int w = (p + i) % N;
+                if (Hands[w].Count != 0) continue;
+                if (PendingKind == "stack" && Pending > 0)
                 {
-                    int t = Next(p);
-                    var got = DrawCards(t, Pending);
+                    int victim = Next(w);
+                    ForcedDraw(victim, Pending);
                     Pending = 0;
-                    Emit(DrawEvent(t, got, true));
+                    PendingKind = "";
                 }
-                Finish(p, "cards");
+                PendingKind = "";
+                Finish(w, "cards");
                 return null;
             }
 
-            Turn = again ? (N == 2 ? p : Next(Next(p))) : Next(p);
-            Emit(Ev.Of("turn", Turn));
+            EndTurn(p);
             return null;
         }
 
@@ -256,26 +496,44 @@ namespace UnoGame.Core
         {
             if (Over) return "game over";
             if (p != Turn) return "not your turn";
-            if (Pending > 0)
+            if (PendingKind == "stack")
             {
                 int amount = Pending;
                 Pending = 0;
-                Emit(DrawEvent(p, DrawCards(p, amount), true));
-                Turn = Next(p);
-                Emit(Ev.Of("turn", Turn));
+                LastDraw = 0;
+                PendingKind = "";
+                ForcedDraw(p, amount);
+                if (CheckMercy()) return null;
+                EndTurn(p);
                 return null;
             }
+            if (PendingKind == "roulette") return "choose a colour for the roulette";
+            if (PendingKind == "dare") return "do the dare or draw";
             if (HasDrawn) return "already drew this turn";
-            var got = DrawCards(p, 1);
+
+            bool deckEmpty = DrawPile.Count == 0 && Discard.Count <= 1;
+            if (Cfg.Launcher)
+            {
+                var fired = HitLauncher(p);
+                if (CheckStalemate(deckEmpty && fired.Count == 0)) return null;
+                EndTurn(p);
+                return null;
+            }
+
+            List<int> got;
+            if (Cfg.DrawUntil) got = DrawUntil(p, h => IsPlayable(p, h));
+            else got = DrawCards(p, 1);
             Emit(DrawEvent(p, got, false));
-            if (got.Count == 1 && IsPlayable(p, got[0]))
+            if (CheckMercy()) return null;
+            if (CheckStalemate(deckEmpty && got.Count == 0)) return null;
+            int last = got.Count > 0 ? got[got.Count - 1] : -1;
+            if (last >= 0 && IsPlayable(p, last))
             {
                 HasDrawn = true;
-                DrawnCard = got[0];
+                DrawnCard = last;
                 return null; // still this player's turn: play the drawn card or pass
             }
-            Turn = Next(p);
-            Emit(Ev.Of("turn", Turn));
+            EndTurn(p);
             return null;
         }
 
@@ -284,10 +542,47 @@ namespace UnoGame.Core
             if (Over) return "game over";
             if (p != Turn) return "not your turn";
             if (!HasDrawn) return "draw a card first";
-            HasDrawn = false;
-            DrawnCard = -1;
-            Turn = Next(p);
-            Emit(Ev.Of("turn", Turn));
+            EndTurn(p);
+            return null;
+        }
+
+        /// <summary>No Mercy Color Roulette: the victim names a colour and draws until it comes up.</summary>
+        public string Roulette(int p, int color)
+        {
+            if (Over) return "game over";
+            if (p != Turn || PendingKind != "roulette") return "no roulette to resolve";
+            if (!(color >= 0 && color <= 3)) return "choose a colour";
+            PendingKind = "";
+            var got = DrawUntil(p, h => FaceOf(h).C == color);
+            var ev = Ev.Of("roulette", p);
+            ev.color = color;
+            ev.n = got.Count;
+            ev.cards = got.ToArray();
+            Emit(ev);
+            if (CheckMercy()) return null;
+            EndTurn(p);
+            return null;
+        }
+
+        /// <summary>UNO Dare: ok = the dare was done (keep your turn), otherwise draw the penalty and lose the turn.</summary>
+        public string Dare(int p, bool ok)
+        {
+            if (Over) return "game over";
+            if (p != Turn || PendingKind != "dare") return "no dare to resolve";
+            int amount = DareAmount;
+            PendingKind = "";
+            DareAmount = 0;
+            var ev = Ev.Of("dare", p);
+            ev.n = amount;
+            ev.forced = ok ? 0 : 1;
+            Emit(ev);
+            if (ok)
+            {
+                Emit(Ev.Of("turn", p));
+                return null;
+            }
+            ForcedDraw(p, amount);
+            EndTurn(p);
             return null;
         }
 
@@ -295,7 +590,9 @@ namespace UnoGame.Core
         public void AutoMove(int p)
         {
             if (Over || p != Turn) return;
-            if (Pending > 0) { Draw(p); return; }
+            if (PendingKind == "stack") { Draw(p); return; }
+            if (PendingKind == "roulette") { Roulette(p, RandInt(4)); return; }
+            if (PendingKind == "dare") { Dare(p, false); return; }
             if (!HasDrawn) Draw(p);
             if (!Over && Turn == p && HasDrawn) Pass(p);
         }
@@ -306,7 +603,7 @@ namespace UnoGame.Core
             Winner = winner;
             int pts = 0;
             for (int i = 0; i < N; i++)
-                if (i != winner) foreach (int id in Hands[i]) pts += Cards.Points(id);
+                if (i != winner) foreach (int id in Hands[i]) pts += Decks.Points(Mode, FaceOf(id), Side);
             Points = pts;
             HasDrawn = false;
             DrawnCard = -1;
@@ -325,11 +622,16 @@ namespace UnoGame.Core
         public St View(int seat)
         {
             bool mine = Turn == seat;
+            int opp = (seat + 1) % N;
             var counts = new int[N];
             for (int i = 0; i < N; i++) counts[i] = Hands[i].Count;
+            var oppFaces = new List<int>();
+            if (Cfg.Flip) foreach (int id in Hands[opp]) oppFaces.Add(OtherFace(id).Code);
             return new St
             {
                 you = seat,
+                mode = Mode,
+                side = Side,
                 hand = Hands[seat].ToArray(),
                 counts = counts,
                 top = Top,
@@ -337,9 +639,15 @@ namespace UnoGame.Core
                 dir = Dir,
                 turn = Turn,
                 pending = Pending,
+                lastDraw = LastDraw,
+                pendingKind = PendingKind,
+                dare = DareAmount,
                 hasDrawn = mine && HasDrawn ? 1 : 0,
                 drawn = mine ? DrawnCard : -1,
+                legal = mine ? LegalMoves(seat).ToArray() : System.Array.Empty<int>(),
                 pile = DrawPile.Count,
+                oppFaces = oppFaces.ToArray(),
+                pileFace = Cfg.Flip && DrawPile.Count > 0 ? OtherFace(DrawPile[DrawPile.Count - 1]).Code : -1,
                 over = Over ? 1 : 0,
                 winner = Winner,
                 pts = Points,
@@ -352,7 +660,7 @@ namespace UnoGame.Core
             var res = new List<Ev>(evs.Count);
             foreach (var ev in evs)
             {
-                if (ev.cards != null && ev.cards.Length > 0 && ev.p != seat)
+                if (ev.cards != null && ev.cards.Length > 0 && ev.p != seat && ev.k != "discardAll")
                 {
                     var copy = ev.Clone();
                     copy.cards = System.Array.Empty<int>();

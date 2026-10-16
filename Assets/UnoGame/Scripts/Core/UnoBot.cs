@@ -2,18 +2,17 @@ using System.Collections.Generic;
 
 namespace UnoGame.Core
 {
-    /// <summary>Bot player, a port of Server/src/bot.js (same rng calls in the same order).</summary>
+    /// <summary>Bot player for every mode, a port of Server/src/bot.js (same rng calls in the same order).</summary>
     public static class UnoBot
     {
-        public enum MoveType { Play, Draw, Pass }
+        public enum MoveType { Play, Draw, Pass, Roulette, Dare }
 
         // Difficulty: new players get Easy, then it adapts to their recent results (Profile.BotLevel).
         public const int Easy = 0, Normal = 1, Hard = 2;
 
-        // Per level: chance to pass a +2/+4 stack on, chance to call UNO, and chance to catch a player
-        // who forgot to call UNO (applied by the session, not here).
         static readonly double[] StackChance = { 0.35, 0.7, 1 };
         static readonly double[] UnoChance = { 0.6, 0.85, 0.92 };
+        static readonly double[] DareSuccess = { 0.5, 0.65, 0.8 };
         public static readonly float[] CatchChance = { 0.25f, 0.7f, 1f };
         const double EasyDrawChance = 0.2, EasyPassChance = 0.4, NormalRandomChance = 0.25;
 
@@ -23,6 +22,7 @@ namespace UnoGame.Core
             public int Card;
             public int Color;
             public bool Uno;
+            public bool Ok;
         }
 
         public static int ClampLevel(int level) => level < Easy || level > Hard ? Hard : level;
@@ -34,7 +34,7 @@ namespace UnoGame.Core
             foreach (int id in hand)
             {
                 if (id == except) continue;
-                int c = Cards.ColorOf(id);
+                int c = g.FaceOf(id).C;
                 if (c < 4) counts[c]++;
             }
             int best = -1, bestCount = 0;
@@ -43,16 +43,43 @@ namespace UnoGame.Core
             return best >= 0 ? best : g.RandInt(4);
         }
 
+        static bool IsSwap(UnoEngine g, Face f) =>
+            f.K == Kind.Swap || (g.Cfg.SevenZero && f.K == Kind.Num && (f.N == 7 || f.N == 0));
+
         static double ScoreCard(UnoEngine g, int p, int id, int oppCount)
         {
-            int v = Cards.ValueOf(id), c = Cards.ColorOf(id);
+            var f = g.FaceOf(id);
+            var hand = g.Hands[p];
             int sameColor = 0;
-            foreach (int h in g.Hands[p]) if (h != id && Cards.ColorOf(h) == c) sameColor++;
-            if (v == Cards.Wild4) return oppCount <= 3 ? 40 : 2;
-            if (v == Cards.Wild) return oppCount <= 2 ? 18 : 4;
-            if (v == Cards.Draw2) return (oppCount <= 3 ? 34 : 14) + sameColor;
-            if (v == Cards.Skip || v == Cards.Reverse) return (oppCount <= 2 ? 30 : 12) + sameColor;
-            return 10 + v * 0.5 + sameColor * 1.5;
+            foreach (int h in hand) if (h != id && g.FaceOf(h).C == f.C) sameColor++;
+            if (IsSwap(g, f)) return hand.Count - 1 > oppCount ? 45 : -20;
+            if (g.Cfg.AllWild)
+            {
+                if (f.K == Kind.WildDraw) return oppCount <= 3 ? 40 : 16;
+                if (f.K == Kind.TargetDraw) return 18;
+                if (f.K == Kind.Wild) return 10;
+                return 14;
+            }
+            switch (f.K)
+            {
+                case Kind.WildDraw: case Kind.WildRevDraw: case Kind.WildDrawColor: case Kind.Roulette:
+                case Kind.HitFire: case Kind.HitAll: case Kind.WildDare:
+                    return oppCount <= 3 ? 40 : 2;
+                case Kind.Wild:
+                    return oppCount <= 2 ? 18 : 4;
+                case Kind.Draw: case Kind.Hit: case Kind.Dare:
+                    return (oppCount <= 3 ? 34 : 14) + sameColor;
+                case Kind.Skip: case Kind.Reverse: case Kind.SkipAll: case Kind.SkipTwo:
+                    return (oppCount <= 2 ? 30 : 12) + sameColor;
+                case Kind.DiscardAll:
+                    return 10 + sameColor * 6;
+                case Kind.Flip:
+                    return 12 + sameColor;
+                case Kind.TargetDraw:
+                    return 20;
+                default:
+                    return 10 + f.N * 0.5 + sameColor * 1.5;
+            }
         }
 
         static Move Simple(MoveType t) => new Move { Type = t, Card = -1, Color = -1 };
@@ -60,6 +87,9 @@ namespace UnoGame.Core
         public static Move Choose(UnoEngine g, int p, int level = Hard)
         {
             level = ClampLevel(level);
+            if (g.PendingKind == "roulette") return new Move { Type = MoveType.Roulette, Card = -1, Color = g.RandInt(4) };
+            if (g.PendingKind == "dare") return new Move { Type = MoveType.Dare, Card = -1, Color = -1, Ok = g.Rng.Next() < DareSuccess[level] };
+
             var hand = g.Hands[p];
             var legal = g.LegalMoves(p);
             if (legal.Count == 0) return Simple(g.HasDrawn ? MoveType.Pass : MoveType.Draw);
@@ -70,19 +100,18 @@ namespace UnoGame.Core
                 {
                     if (g.Rng.Next() < EasyPassChance) return Simple(MoveType.Pass);
                 }
-                else if (g.Pending == 0 && g.Rng.Next() < EasyDrawChance) return Simple(MoveType.Draw);
+                else if (g.PendingKind == "" && g.Rng.Next() < EasyDrawChance) return Simple(MoveType.Draw);
             }
 
             int pick = -1;
-            if (g.Pending > 0)
+            if (g.PendingKind == "stack")
             {
                 if (StackChance[level] < 1 && g.Rng.Next() >= StackChance[level]) return Simple(MoveType.Draw);
-                foreach (int id in legal) if (Cards.ValueOf(id) == Cards.Draw2) { pick = id; break; }
-                if (pick < 0) pick = legal[0];
+                foreach (int id in legal) if (pick < 0 || g.FaceOf(id).N < g.FaceOf(pick).N) pick = id;
             }
             else if (level == Easy)
             {
-                var plain = legal.FindAll(id => Cards.ValueOf(id) <= 9);
+                var plain = legal.FindAll(id => g.FaceOf(id).K == Kind.Num);
                 var pool = plain.Count > 0 && g.Rng.Next() < 0.75 ? plain : legal;
                 pick = pool[g.RandInt(pool.Count)];
             }
@@ -101,8 +130,9 @@ namespace UnoGame.Core
                 }
             }
 
+            var f = g.FaceOf(pick);
             int color = -1;
-            if (Cards.IsWild(pick))
+            if (f.IsWild && !g.Cfg.AllWild)
                 color = level == Easy && g.Rng.Next() < 0.5 ? g.RandInt(4) : BestColor(g, hand, pick);
             bool uno = hand.Count == 2 && g.Rng.Next() < UnoChance[level];
             return new Move { Type = MoveType.Play, Card = pick, Color = color, Uno = uno };
@@ -114,6 +144,8 @@ namespace UnoGame.Core
             {
                 case MoveType.Play: return g.Play(p, m.Card, m.Color, m.Uno);
                 case MoveType.Draw: return g.Draw(p);
+                case MoveType.Roulette: return g.Roulette(p, m.Color);
+                case MoveType.Dare: return g.Dare(p, m.Ok);
                 default: return g.Pass(p);
             }
         }

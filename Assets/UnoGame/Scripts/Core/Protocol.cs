@@ -42,16 +42,24 @@ namespace UnoGame.Core
     public class St
     {
         public int you;
+        public string mode;
+        public int side;        // UNO Flip: 0 light, 1 dark
         public int[] hand;
         public int[] counts;
         public int top;
-        public int color;
+        public int color;       // 4 = anything goes
         public int dir;
         public int turn;
         public int pending;
+        public int lastDraw;
+        public string pendingKind;  // "", "stack", "roulette", "dare"
+        public int dare;
         public int hasDrawn;
         public int drawn;
+        public int[] legal;     // cards you may play right now (server-authoritative)
         public int pile;
+        public int[] oppFaces;  // UNO Flip: face codes of the other side of the opponent's cards
+        public int pileFace;    // UNO Flip: face code of the other side of the draw pile's top card
         public int over;
         public int winner;
         public int pts;
@@ -67,6 +75,7 @@ namespace UnoGame.Core
         public int online;
         public int resumed;
         public string match;
+        public string mode;
         public int seat;
         public PlayerInfo[] players;
         public Ev[] ev;
