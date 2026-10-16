@@ -18,6 +18,7 @@ namespace UnoGame
         public bool sound = true;
         public string recent = "";   // last results, newest last: "WLW..."
         public string lastMode = "classic";
+        public int lastSize = 2;     // players at the table (2 to 10)
         public int lossStreak;
 
         [NonSerialized] string key;

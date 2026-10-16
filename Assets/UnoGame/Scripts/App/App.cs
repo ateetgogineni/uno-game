@@ -30,6 +30,20 @@ namespace UnoGame
             set { Profile.lastMode = Core.Decks.Normalize(value); Profile.Save(); }
         }
 
+        /// <summary>Players at the table picked on the rules screen (2 to 10, remembered between sessions).</summary>
+        public int SelectedSize
+        {
+            get => Mathf.Clamp(Profile.lastSize, Matchmaker.MinPlayers, Matchmaker.MaxPlayers);
+            set { Profile.lastSize = Mathf.Clamp(value, Matchmaker.MinPlayers, Matchmaker.MaxPlayers); Profile.Save(); }
+        }
+
+        /// <summary>Tables of this many players or more are played in landscape.</summary>
+        public const int LandscapeFrom = 5;
+        public static bool IsLandscapeTable(int players) => players >= LandscapeFrom;
+
+        /// <summary>True while the screen is turned to landscape for a big table.</summary>
+        public bool Landscape { get; private set; }
+
         /// <summary>Set by "Play again": the home screen opens matchmaking straight away.</summary>
         public bool AutoSearch;
 
@@ -90,6 +104,16 @@ namespace UnoGame
             SetProgress(0f);
             yield return Tw.Alpha(fader, 1f, 0.28f, Ease.InOutQuad).Wait();
 
+            // Big tables are played in landscape: turn the screen while the loading overlay covers it.
+            bool land = scene == GameScene && Match.Session != null && IsLandscapeTable(Match.Session.Size);
+            if (land != Landscape)
+            {
+                SetOrientation(land);
+                float until = Time.unscaledTime + 1.5f;
+                while ((Screen.width > Screen.height) != land && Time.unscaledTime < until) yield return null;
+                yield return null;
+            }
+
             // Fill the bar smoothly: it never runs ahead of the real load, and stays up long enough to read.
             var op = SceneManager.LoadSceneAsync(scene);
             op.allowSceneActivation = false;
@@ -113,6 +137,33 @@ namespace UnoGame
 
         const float MinLoadSeconds = 1.1f;
 
+        /// <summary>
+        /// Portrait for the menus and small tables, landscape for 5+ players. On a phone this rotates the
+        /// screen; the desktop test player turns its window instead, so the autopilot sees the same layouts.
+        /// </summary>
+        public void SetOrientation(bool landscape)
+        {
+            Landscape = landscape;
+            if (loaderScaler != null) loaderScaler.referenceResolution = landscape ? new Vector2(1920, 1080) : new Vector2(1080, 1920);
+            if (Application.isMobilePlatform)
+            {
+                if (landscape)
+                {
+                    Screen.autorotateToPortrait = false;
+                    Screen.autorotateToPortraitUpsideDown = false;
+                    Screen.autorotateToLandscapeLeft = true;
+                    Screen.autorotateToLandscapeRight = true;
+                    Screen.orientation = ScreenOrientation.LandscapeLeft;
+                    Screen.orientation = ScreenOrientation.AutoRotation;
+                }
+                else Screen.orientation = ScreenOrientation.Portrait;
+            }
+            else if (!Application.isEditor && !Screen.fullScreen && (Screen.width > Screen.height) != landscape)
+            {
+                Screen.SetResolution(Screen.height, Screen.width, FullScreenMode.Windowed);
+            }
+        }
+
         static readonly string[] LoadingTips =
         {
             "Match the color or the number of the top card",
@@ -120,9 +171,11 @@ namespace UnoGame
             "Tap UNO! before playing your second-last card",
             "Skip and Reverse give you another turn",
             "Wild Draw 4 only works with no card of the current color",
+            "Up to 10 players: big tables turn your phone to landscape",
         };
 
         TMPro.TextMeshProUGUI loadTitle, loadPercent, loadTip;
+        CanvasScaler loaderScaler;
         RectTransform loadFill;
         float loadFillWidth;
 
@@ -144,6 +197,7 @@ namespace UnoGame
             var scaler = go.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1080, 1920);
+            loaderScaler = scaler;
             go.AddComponent<AdaptiveScaler>();
             fader = go.GetComponent<CanvasGroup>();
             fader.alpha = 0f;

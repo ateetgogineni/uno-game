@@ -6,7 +6,10 @@ using UnityEngine.UI;
 
 namespace UnoGame.Home
 {
-    /// <summary>Rules screen for a game mode, shown after picking a mode and before matchmaking.</summary>
+    /// <summary>
+    /// Rules screen for a game mode, shown after picking a mode and before matchmaking. The row above
+    /// PLAY picks the table size (2 to 10 players; 5+ is played in landscape).
+    /// </summary>
     public sealed class ModeInfoPanel : MonoBehaviour
     {
         public CanvasGroup group;
@@ -19,6 +22,10 @@ namespace UnoGame.Home
         public RectTransform content;
         public Button play;
         public Button close;
+        public Button[] sizeButtons = new Button[SizeCount];
+        public TextMeshProUGUI sizeLabel;
+
+        const int SizeMin = 2, SizeCount = 9;
 
         const float ContentWidth = 820f;
         ModeInfo mode;
@@ -31,6 +38,34 @@ namespace UnoGame.Home
         {
             play.onClick.AddListener(PlayNow);
             close.onClick.AddListener(Hide);
+            for (int i = 0; i < sizeButtons.Length; i++)
+            {
+                int n = SizeMin + i;
+                sizeButtons[i].onClick.AddListener(() => PickSize(n));
+            }
+        }
+
+        public void PickSize(int n)
+        {
+            App.I.SelectedSize = n;
+            RefreshSize(true);
+        }
+
+        void RefreshSize(bool animate)
+        {
+            int size = App.I.SelectedSize;
+            for (int i = 0; i < sizeButtons.Length; i++)
+            {
+                bool on = SizeMin + i == size;
+                var img = sizeButtons[i].GetComponent<Image>();
+                img.color = on ? Palette.Gold : new Color(1, 1, 1, 0.1f);
+                var label = sizeButtons[i].GetComponentInChildren<TextMeshProUGUI>();
+                label.color = on ? Palette.Ink : new Color(1, 1, 1, 0.85f);
+                if (on && animate) Tw.Punch(sizeButtons[i].transform, 0.18f, 0.3f);
+            }
+            sizeLabel.text = size == 2 ? "PLAYERS  <color=#FFFFFFAA>•  1 vs 1</color>"
+                : App.IsLandscapeTable(size) ? "PLAYERS  <color=#FFFFFFAA>•  " + size + " at the table, played in landscape</color>"
+                : "PLAYERS  <color=#FFFFFFAA>•  " + size + " at the table</color>";
         }
 
         public void Show(ModeInfo m, Action<ModeInfo> playAction)
@@ -49,6 +84,7 @@ namespace UnoGame.Home
                 Tw.Scale(artCards[i].transform, 1f, 0.45f, Ease.OutBackStrong, 0.12f + i * 0.08f);
             }
             Populate();
+            RefreshSize(false);
             scroll.verticalNormalizedPosition = 1f;
             group.alpha = 0f;
             group.blocksRaycasts = true;
@@ -168,7 +204,7 @@ namespace UnoGame.Home
             tagline = UIKit.Txt(panel, "Tagline", "", 34, new Color(1, 1, 1, 0.72f));
             tagline.rectTransform.At(new Vector2(0.5f, 1), new Vector2(0, -402), new Vector2(880, 50));
 
-            var view = UIKit.Node("Scroll", panel).At(new Vector2(0.5f, 1), new Vector2(0, -440), new Vector2(ContentWidth, 1000), new Vector2(0.5f, 1));
+            var view = UIKit.Node("Scroll", panel).At(new Vector2(0.5f, 1), new Vector2(0, -440), new Vector2(ContentWidth, 830), new Vector2(0.5f, 1));
             var viewBg = view.gameObject.AddComponent<Image>();
             viewBg.color = new Color(0, 0, 0, 0.001f);
             view.gameObject.AddComponent<RectMask2D>();
@@ -185,6 +221,21 @@ namespace UnoGame.Home
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Elastic;
             scroll.scrollSensitivity = 30f;
+
+            // table size: 2 to 10 players
+            sizeLabel = UIKit.Txt(panel, "SizeLabel", "PLAYERS", 30, Palette.Gold, TextAlignmentOptions.Center, FontStyles.Bold);
+            sizeLabel.characterSpacing = 4;
+            sizeLabel.rectTransform.At(new Vector2(0.5f, 0), new Vector2(0, 372), new Vector2(880, 44));
+            sizeLabel.enableAutoSizing = true;
+            sizeLabel.fontSizeMin = 22;
+            sizeLabel.fontSizeMax = 30;
+            for (int i = 0; i < SizeCount; i++)
+            {
+                var b = UIKit.Btn(panel, "Size" + (SizeMin + i), UIKit.S("circle"), new Vector2(84, 84), (SizeMin + i).ToString(), 40);
+                b.GetComponent<Image>().type = Image.Type.Simple;
+                ((RectTransform)b.transform).At(new Vector2(0.5f, 0), new Vector2((i - (SizeCount - 1) / 2f) * 96f, 288), new Vector2(84, 84));
+                sizeButtons[i] = b;
+            }
 
             play = UIKit.Btn(panel, "Play", UIKit.S("btn_green"), new Vector2(560, 156), "PLAY", 76);
             ((RectTransform)play.transform).At(new Vector2(0.5f, 0), new Vector2(0, 120), new Vector2(560, 156));
