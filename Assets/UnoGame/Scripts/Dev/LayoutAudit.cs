@@ -34,9 +34,17 @@ namespace UnoGame.Dev
             var items = new List<Item>();
             Add(items, "BackButton", gc.backButton.transform);
             Add(items, "MenuButton", gc.menuButton.transform);
-            Add(items, "OppAvatar", gc.oppPanel.avatar.transform);
-            Add(items, "OppName", gc.oppPanel.nameRow);
-            Add(items, "OppCount", gc.oppPanel.countText.transform);
+            int seat = gc.MySeat;
+            for (int s = 0; s < gc.SeatCount; s++)
+            {
+                if (s == seat) continue;
+                var p = gc.SeatPanel(s);
+                string tag = gc.MultiSeat ? "Seat" + s : "Opp";
+                Add(items, tag + "Avatar", p.avatar.transform);
+                Add(items, tag + "Name", p.nameRow);
+                Add(items, tag + "Count", p.countRoot != null ? p.countRoot : p.countText.transform);
+                if (p.timerRoot.gameObject.activeInHierarchy) Add(items, tag + "Timer", p.timerRoot);
+            }
             Add(items, "DrawPile", gc.drawPile);
             Add(items, "Discard", gc.discardPile);
             Add(items, "ArrowA", gc.arrowA);
@@ -59,17 +67,35 @@ namespace UnoGame.Dev
             Add(items, "UnoButton", gc.unoButton.transform);
             Add(items, "PassButton", gc.passButton.transform);
             for (int i = 0; i < gc.myHand.Cards.Count; i++) Add(items, "HandCard" + i, gc.myHand.Cards[i].face.transform);
-            for (int i = 0; i < gc.oppHand.Cards.Count; i++) Add(items, "OppCard" + i, gc.oppHand.Cards[i].face.transform, true);
-            Report("game", items, (a, b) =>
+            for (int s = 0; s < gc.SeatCount; s++)
+            {
+                if (s == seat) continue;
+                var h = gc.SeatHand(s);
+                string tag = gc.MultiSeat ? "Seat" + s + "Card" : "OppCard";
+                for (int i = 0; i < h.Cards.Count; i++) Add(items, tag + i, h.Cards[i].face.transform, true);
+            }
+            Report("game" + (gc.MultiSeat ? " " + gc.SeatCount + "p" : ""), items, (a, b) =>
             {
                 bool aHand = a.StartsWith("HandCard"), bHand = b.StartsWith("HandCard");
                 bool aOpp = a.StartsWith("OppCard"), bOpp = b.StartsWith("OppCard");
                 if ((aHand && bHand) || (aOpp && bOpp)) return false;      // cards in a fan overlap by design
+                // a seat's own pieces overlap by design (fan behind the avatar, badge on its edge)
+                string sa = SeatOf(a), sb = SeatOf(b);
+                if (sa != null && sa == sb) return false;
+                if (a.Contains("Card") && a.StartsWith("Seat") && b.Contains("Card") && b.StartsWith("Seat")) return false;
                 if ((a == "DrawPile" && b == "Discard") || (a == "Discard" && b == "DrawPile")) return false;
                 if (a == "Launcher" || b == "Launcher") return !(a == "DrawPile" || b == "DrawPile" || a == "Discard" || b == "Discard");
                 if ((aOpp && (b == "BackButton" || b == "MenuButton")) || (bOpp && (a == "BackButton" || a == "MenuButton"))) return false;
                 return true;
             });
+        }
+
+        static string SeatOf(string name)
+        {
+            if (!name.StartsWith("Seat")) return null;
+            int i = 4;
+            while (i < name.Length && char.IsDigit(name[i])) i++;
+            return name.Substring(0, i);
         }
 
         public static void Home(HomeScreen home)
