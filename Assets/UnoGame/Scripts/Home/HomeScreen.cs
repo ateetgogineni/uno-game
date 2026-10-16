@@ -8,12 +8,10 @@ using UnityEngine.UI;
 
 namespace UnoGame.Home
 {
-    /// <summary>Home screen: logo, profile, online count and the Play button.</summary>
+    /// <summary>Home screen: logo, profile, online status and the list of game modes.</summary>
     public sealed class HomeScreen : MonoBehaviour
     {
         public RectTransform logo;
-        public Button playButton;
-        public RectTransform playRoot;
         public Button profileButton;
         public Image profileAvatar;
         public TextMeshProUGUI profileName;
@@ -25,11 +23,13 @@ namespace UnoGame.Home
         public Image onlineIcon;
         public RectTransform onlinePill;
         public TextMeshProUGUI onlineText;
-        public RectTransform howHeader;
-        public RectTransform[] tipCards;
+        public RectTransform modesHeader;
+        public RectTransform[] modeTiles;
+        public Button[] modeButtons;
         public RectTransform floatLayer;
         public RectTransform topBar;
         public RectTransform bottomInfo;
+        public ModeInfoPanel modeInfo;
         public MatchmakingScreen matchmaking;
         public ProfilePanel profilePanel;
         public ConfirmDialog quitDialog;
@@ -40,7 +40,11 @@ namespace UnoGame.Home
 
         void Start()
         {
-            playButton.onClick.AddListener(OnPlay);
+            for (int i = 0; i < modeButtons.Length; i++)
+            {
+                var m = ModeInfo.All[i];
+                modeButtons[i].onClick.AddListener(() => SelectMode(m.Id));
+            }
             profileButton.onClick.AddListener(() => profilePanel.Show(RefreshProfile));
             soundButton.onClick.AddListener(() => { App.I.SetSound(!App.I.Profile.sound); RefreshSound(); });
             App.I.Match.StatusChanged += RefreshOnline;
@@ -62,44 +66,43 @@ namespace UnoGame.Home
         IEnumerator Intro()
         {
             var logoHome = logo.anchoredPosition;
-            logo.anchoredPosition = logoHome + new Vector2(0, 600);
+            logo.anchoredPosition = logoHome + new Vector2(0, 500);
             logo.localScale = Vector3.one * 0.7f;
-            playRoot.localScale = Vector3.zero;
             onlinePill.localScale = Vector3.zero;
-            var headerGroup = UIKit.Group(howHeader, 0f, false);
-            foreach (var c in tipCards) c.localScale = Vector3.zero;
-            Tw.Scale(onlinePill, 1f, 0.45f, Ease.OutBack, 0.75f);
-            Tw.Alpha(headerGroup, 1f, 0.4f, Ease.OutQuad, 0.85f);
-            for (int i = 0; i < tipCards.Length; i++)
-            {
-                var card = tipCards[i];
-                Tw.Scale(card, 1f, 0.5f, Ease.OutBackStrong, 0.9f + i * 0.1f);
-                card.gameObject.AddComponent<Floater>().phase = i * 1.3f;
-                var f = card.GetComponent<Floater>();
-                f.amplitude = 5f;
-                f.speed = 1.2f;
-            }
+            var headerGroup = UIKit.Group(modesHeader, 0f, false);
+            foreach (var t in modeTiles) t.localScale = Vector3.zero;
             topBar.anchoredPosition += new Vector2(0, 200);
             Tw.Pos(topBar, topBar.anchoredPosition - new Vector2(0, 200), 0.5f, Ease.OutCubic, 0.2f);
             Tw.Pos(logo, logoHome, 0.7f, Ease.OutBack);
             Tw.Scale(logo, 1f, 0.7f, Ease.OutBack);
-            yield return Tw.Wait(0.45f);
+            Tw.Scale(onlinePill, 1f, 0.45f, Ease.OutBack, 0.45f);
+            Tw.Alpha(headerGroup, 1f, 0.4f, Ease.OutQuad, 0.5f);
+            for (int i = 0; i < modeTiles.Length; i++)
+                Tw.Scale(modeTiles[i], 1f, 0.5f, Ease.OutBackStrong, 0.55f + i * 0.07f);
+            yield return Tw.Wait(0.35f);
             App.Play(Sound.Whoosh, 0.6f);
-            yield return Tw.Scale(playRoot, 1f, 0.5f, Ease.OutBackStrong).Wait();
+            yield return Tw.Wait(0.75f);
             logo.GetComponent<Floater>().Rebase();
             logo.GetComponent<Floater>().enabled = true;
-            playRoot.GetComponent<Pulse>().enabled = true;
             Ready = true;
             if (App.I.AutoSearch)
             {
                 App.I.AutoSearch = false;
-                OnPlay();
+                StartMatch(ModeInfo.Get(App.I.SelectedMode));
             }
         }
 
-        public void OnPlay()
+        /// <summary>Shows the rules for a mode; its PLAY button starts matchmaking.</summary>
+        public void SelectMode(string id)
+        {
+            if (matchmaking.IsOpen || modeInfo.IsOpen || App.I.IsLoading) return;
+            modeInfo.Show(ModeInfo.Get(id), StartMatch);
+        }
+
+        public void StartMatch(ModeInfo m)
         {
             if (matchmaking.IsOpen || App.I.IsLoading) return;
+            App.I.SelectedMode = m.Id;
             matchmaking.Open();
         }
 
@@ -155,10 +158,10 @@ namespace UnoGame.Home
         void SpawnFloaters()
         {
             var rnd = new System.Random();
-            for (int i = 0; i < 9; i++)
+            var cards = ArtLibrary.I.cards;
+            for (int i = 0; i < 9 && cards.Count > 0; i++)
             {
-                int id = rnd.Next(0, 108);
-                var img = UIKit.Img(floatLayer, "Float", ArtLibrary.I.Face(id), new Color(1, 1, 1, 0.22f));
+                var img = UIKit.Img(floatLayer, "Float", cards[rnd.Next(cards.Count)], new Color(1, 1, 1, 0.2f));
                 img.type = Image.Type.Simple;
                 var rt = img.rectTransform;
                 float s = 0.5f + (float)rnd.NextDouble() * 0.45f;
@@ -187,6 +190,7 @@ namespace UnoGame.Home
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 if (profilePanel.IsOpen) profilePanel.Hide();
+                else if (modeInfo.IsOpen) modeInfo.Hide();
                 else if (quitDialog.IsOpen) quitDialog.Close(false);
                 else if (!matchmaking.IsOpen) quitDialog.Show("Quit game?", "Come back soon!", "QUIT", "STAY", Application.Quit);
             }

@@ -17,6 +17,7 @@ namespace UnoGame
         public int points;
         public bool sound = true;
         public string recent = "";   // last results, newest last: "WLW..."
+        public string lastMode = "classic";
         public int lossStreak;
 
         [NonSerialized] string key;

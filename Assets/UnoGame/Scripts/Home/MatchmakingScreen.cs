@@ -25,6 +25,7 @@ namespace UnoGame.Home
         public TextMeshProUGUI tip;
         public TextMeshProUGUI mode;
         public RectTransform modeChip;
+        public TextMeshProUGUI modeTitle;
         public Button cancel;
 
         static readonly string[] Tips =
@@ -76,7 +77,8 @@ namespace UnoGame.Home
             status.text = "FINDING PLAYERS...";
             modeChip.gameObject.SetActive(false);
             App.I.Match.Matched += OnMatched;
-            App.I.Match.StartSearch();
+            modeTitle.text = ModeInfo.Get(App.I.SelectedMode).Title.ToUpper();
+            App.I.Match.StartSearch(App.I.SelectedMode);
             Debug.Log("[Home] matchmaking started");
         }
 
@@ -174,9 +176,15 @@ namespace UnoGame.Home
             var safe = UIKit.Node("Safe", root).Fill();
             safe.gameObject.AddComponent<SafeArea>();
 
-            var title = UIKit.Txt(safe, "Title", "MATCHMAKING", 44, new Color(1, 1, 1, 0.7f), TextAlignmentOptions.Center, FontStyles.Bold);
+            var title = UIKit.Txt(safe, "Title", "MATCHMAKING", 34, new Color(1, 1, 1, 0.6f), TextAlignmentOptions.Center, FontStyles.Bold);
             title.characterSpacing = 12;
-            title.rectTransform.At(new Vector2(0.5f, 1), new Vector2(0, -110), new Vector2(900, 70));
+            title.rectTransform.At(new Vector2(0.5f, 1), new Vector2(0, -90), new Vector2(900, 50));
+            modeTitle = UIKit.Txt(safe, "Mode", "CLASSIC UNO", 54, Palette.Gold, TextAlignmentOptions.Center, FontStyles.Bold).Shadowed();
+            modeTitle.characterSpacing = 4;
+            modeTitle.rectTransform.At(new Vector2(0.5f, 1), new Vector2(0, -150), new Vector2(940, 76));
+            modeTitle.enableAutoSizing = true;
+            modeTitle.fontSizeMin = 32;
+            modeTitle.fontSizeMax = 54;
 
             var center = UIKit.Node("Center", safe).At(new Vector2(0.5f, 0.5f), new Vector2(0, 170), new Vector2(800, 800));
             for (int i = 1; i <= 2; i++)
@@ -186,11 +194,10 @@ namespace UnoGame.Home
             }
             var orbit = UIKit.Node("Orbit", center).At(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(600, 600));
             UIKit.Group(orbit, 1f, false);
-            string[] colors = { "card_red_7", "card_yellow_11", "card_green_12", "card_blue_4" };
             for (int i = 0; i < 4; i++)
             {
                 float a = i * Mathf.PI / 2f;
-                var c = UIKit.Img(orbit, "OrbitCard" + i, i % 2 == 0 ? ArtLibrary.I.cardBack : ArtLibrary.I.cardFaces[CardIndex(colors[i])], Color.white);
+                var c = UIKit.Img(orbit, "OrbitCard" + i, i % 2 == 0 ? ArtLibrary.I.cardBack : ArtLibrary.I.Card("w_wild"), Color.white);
                 c.type = Image.Type.Simple;
                 c.rectTransform.At(new Vector2(0.5f, 0.5f), new Vector2(Mathf.Cos(a) * 285f, Mathf.Sin(a) * 285f), new Vector2(86, 120));
                 c.rectTransform.localEulerAngles = new Vector3(0, 0, i * 90f - 90f);
@@ -247,13 +254,6 @@ namespace UnoGame.Home
             ((RectTransform)cancel.transform).At(new Vector2(0.5f, 0), new Vector2(0, 170), new Vector2(420, 132));
         }
 
-        static int CardIndex(string spriteName)
-        {
-            // card_<colour>_<value>
-            var parts = spriteName.Split('_');
-            int c = System.Array.IndexOf(new[] { "red", "yellow", "green", "blue" }, parts[1]);
-            return c * 13 + int.Parse(parts[2]);
-        }
 
         static Image AvatarBlock(RectTransform parent, out TextMeshProUGUI name)
         {

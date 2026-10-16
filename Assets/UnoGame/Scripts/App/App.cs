@@ -23,6 +23,13 @@ namespace UnoGame
         public Sfx Sfx { get; private set; }
         public Matchmaker Match { get; private set; }
 
+        /// <summary>Game mode picked on the home screen (remembered between sessions).</summary>
+        public string SelectedMode
+        {
+            get => Core.Decks.Normalize(Profile.lastMode);
+            set { Profile.lastMode = Core.Decks.Normalize(value); Profile.Save(); }
+        }
+
         /// <summary>Set by "Play again": the home screen opens matchmaking straight away.</summary>
         public bool AutoSearch;
 
