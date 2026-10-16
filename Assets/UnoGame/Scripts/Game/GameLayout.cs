@@ -56,13 +56,35 @@ namespace UnoGame.Game
             drawPile.localScale = Vector3.one * DeckScale;
             var deckShadow = UIKit.Img(drawPile, "Shadow", UIKit.S("card_shadow"), new Color(1, 1, 1, 0.9f));
             deckShadow.rectTransform.Fill(-23, -41, -33, -15);
+            var layers = new System.Collections.Generic.List<Image> { deckShadow };
             for (int i = 2; i >= 0; i--)
             {
                 var back = UIKit.Img(drawPile, "Back" + i, ArtLibrary.I.cardBack, i == 0 ? Color.white : new Color(0.82f, 0.82f, 0.86f), i == 0);
+                back.type = Image.Type.Simple;
                 back.rectTransform.Fill(i * 5, -i * 5, -i * 5, i * 5);
-                if (i == 0) drawButton = back.gameObject.AddComponent<Button>();
+                if (i == 0)
+                {
+                    drawButton = back.gameObject.AddComponent<Button>();
+                    deckTop = back;
+                }
+                else layers.Add(back);
             }
+            deckLayers = layers.ToArray();
             drawButton.transition = Selectable.Transition.None;
+
+            // UNO Attack: the card launcher replaces the draw pile (taps still reach the button underneath).
+            launcherImg = UIKit.Img(tableCenter, "Launcher", UIKit.S("launcher"), Color.white);
+            launcherImg.type = Image.Type.Simple;
+            launcherImg.rectTransform.At(Center, new Vector2(-180, 14), new Vector2(236, 272));
+
+            // Mode / Flip side badge above the discard pile.
+            modeChip = UIKit.Chip(tableCenter, "ModeChip", 54, null, 22f, 10f);
+            // left-anchored so longer labels grow to the right, away from the direction arrow
+            modeChip.At(Center, new Vector2(-84, 296), new Vector2(240, 54), new Vector2(0, 0.5f));
+            modeIcon = UIKit.LayoutIcon(modeChip, "Dot", UIKit.S("circle"), 22, Palette.Red);
+            modeText = UIKit.Txt(modeChip, "Text", "CLASSIC", 28, Color.white, TextAlignmentOptions.Center, FontStyles.Bold);
+            modeText.characterSpacing = 4;
+            modeText.rectTransform.sizeDelta = new Vector2(200, 54);
 
             discardPile = UIKit.Node("DiscardPile", tableCenter).At(Center, new Vector2(60, 0), new Vector2(CardView.Width, CardView.Height));
 
@@ -204,7 +226,11 @@ namespace UnoGame.Game
             picker.panel = UIKit.Img(pk, "Panel", UIKit.S("panel"), new Color(1, 1, 1, 0.97f), true).rectTransform;
             picker.panel.At(Center, new Vector2(0, 170), new Vector2(640, 640));
             var ptitle = UIKit.Txt(picker.panel, "Title", "Choose a color", 48, Color.white, TextAlignmentOptions.Center, FontStyles.Bold);
-            ptitle.rectTransform.At(Center, new Vector2(0, 245), new Vector2(560, 70));
+            ptitle.rectTransform.At(Center, new Vector2(0, 245), new Vector2(590, 70));
+            ptitle.enableAutoSizing = true;
+            ptitle.fontSizeMin = 30;
+            ptitle.fontSizeMax = 48;
+            picker.title = ptitle;
             string[] ballNames = { "ball_red", "ball_yellow", "ball_green", "ball_blue" };
             Vector2[] ballPos = { new Vector2(-122, 60), new Vector2(122, 60), new Vector2(-122, -172), new Vector2(122, -172) };
             for (int i = 0; i < 4; i++)
@@ -302,6 +328,12 @@ namespace UnoGame.Game
             ((RectTransform)result.home.transform).At(Center, new Vector2(0, -640), new Vector2(400, 124));
             result.confettiLayer = UIKit.Node("Confetti", rs).Fill();
             rs.gameObject.SetActive(false);
+
+            // UNO Dare: dare-or-draw challenges
+            var dp = UIKit.Node("Dare", overlays);
+            dare = dp.gameObject.AddComponent<DarePanel>();
+            dare.Build();
+            dp.gameObject.SetActive(false);
 
             // dialog
             var dg = UIKit.Node("Dialog", overlays).Fill();

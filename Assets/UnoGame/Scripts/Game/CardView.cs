@@ -27,7 +27,7 @@ namespace UnoGame.Game
         public event Action<CardView> Clicked;
 
         public RectTransform Rect => (RectTransform)transform;
-        public int SortKey => Id >= 0 ? Cards.SortKey(Id) : 0;
+        public int SortKey => Id >= 0 ? Cards.SortKey(Table.FaceOf(Id), Id) : 0;
 
         public void Set(int id, bool faceUp)
         {
@@ -35,6 +35,12 @@ namespace UnoGame.Game
             FaceUp = faceUp;
             face.sprite = faceUp && id >= 0 ? ArtLibrary.I.Face(id) : ArtLibrary.I.cardBack;
         }
+
+        /// <summary>Re-draw for the current Flip side.</summary>
+        public void Refresh() => Set(Id, FaceUp);
+
+        /// <summary>Show a specific face (UNO Flip: the other side of an opponent's card).</summary>
+        public void ShowFace(Face f, int side) => face.sprite = ArtLibrary.I.FaceSprite(f, side);
 
         public Tween Flip(bool toFaceUp, int id, float duration = 0.28f, float delay = 0f)
         {
@@ -94,6 +100,7 @@ namespace UnoGame.Game
             cv.glow.type = Image.Type.Simple;
             cv.glow.rectTransform.Fill(-26, -26, -26, -26);
             cv.face = UIKit.Img(cv.visual, "Face", ArtLibrary.I.cardBack, Color.white, true);
+            cv.face.preserveAspect = false;
             cv.face.type = Image.Type.Simple;
             cv.face.rectTransform.Fill();
             cv.dim = UIKit.Img(cv.visual, "Dim", ArtLibrary.I.cardMask, new Color(0.02f, 0.03f, 0.05f, 0f));

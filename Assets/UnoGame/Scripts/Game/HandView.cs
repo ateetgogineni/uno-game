@@ -54,6 +54,13 @@ namespace UnoGame.Game
 
         public void Remove(CardView cv) => Cards.Remove(cv);
 
+        /// <summary>Re-sort after the faces changed (UNO Flip turned the cards over).</summary>
+        public void Resort()
+        {
+            if (opponent) return;
+            Cards.Sort((a, b) => a.SortKey.CompareTo(b.SortKey));
+        }
+
         public CardView Find(int id)
         {
             foreach (var c in Cards) if (c.Id == id) return c;

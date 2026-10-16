@@ -1,23 +1,25 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
+using System;
 using TMPro;
-using UnoGame.Core;
 using UnoGame.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace UnoGame.Game
 {
-    /// <summary>"Choose a color" dialog shown when a wild card is played.</summary>
+    /// <summary>
+    /// "Choose a color" dialog: wild cards, and No Mercy's Color Roulette (which can't be cancelled).
+    /// Shows the Dark-side colours when UNO Flip is on its dark side.
+    /// </summary>
     public sealed class ColorPicker : MonoBehaviour
     {
         public CanvasGroup group;
         public RectTransform panel;
         public Button[] balls = new Button[4];
         public Button dim;
+        public TextMeshProUGUI title;
         Action<int> callback;
         bool closing;
+        bool cancellable;
 
         public bool IsOpen => gameObject.activeSelf && !closing;
 
@@ -28,13 +30,16 @@ namespace UnoGame.Game
                 int c = i;
                 balls[i].onClick.AddListener(() => Choose(c));
             }
-            dim.onClick.AddListener(() => Choose(-1));
+            dim.onClick.AddListener(() => { if (cancellable) Choose(-1); });
         }
 
-        public void Show(Action<int> onChoose)
+        public void Show(Action<int> onChoose, int side = 0, string heading = "Choose a color", bool canCancel = true)
         {
             callback = onChoose;
+            cancellable = canCancel;
             closing = false;
+            if (title != null) title.text = heading;
+            for (int i = 0; i < balls.Length; i++) balls[i].GetComponent<Image>().sprite = ArtLibrary.I.Ball(i, side);
             gameObject.SetActive(true);
             group.alpha = 0f;
             group.blocksRaycasts = true;

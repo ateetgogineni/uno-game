@@ -19,7 +19,8 @@ namespace UnoGame.UI
             int half = Mathf.FloorToInt(t + 0.5f);
             if (half == lastHalf || face == null || ArtLibrary.I == null) return;
             lastHalf = half;
-            face.sprite = half % 2 == 0 ? ArtLibrary.I.cardBack : ArtLibrary.I.Face(Random.Range(0, 108));
+            var cards = ArtLibrary.I.cards;
+            face.sprite = half % 2 == 0 || cards.Count == 0 ? ArtLibrary.I.cardBack : cards[Random.Range(0, cards.Count)];
         }
     }
 }
