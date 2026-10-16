@@ -93,6 +93,7 @@ namespace UnoGame.EditorTools
             var gc = game.gameObject.AddComponent<GameController>();
             var overlays = UIKit.Node("Overlays", root).Fill();
             gc.Build(card, overlays);
+            gc.tableBg = bg;
             EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene(), GamePath);
         }
 
