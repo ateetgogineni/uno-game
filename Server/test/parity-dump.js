@@ -7,10 +7,12 @@ const { MODE_IDS } = require('../src/cards');
 const { chooseMove, applyMove } = require('../src/bot');
 
 const lines = [];
-for (let seed = 1; seed <= 600; seed++) {
+// 600 two-player games, then 240 games of 3 to 10 players.
+for (let seed = 1; seed <= 840; seed++) {
   const mode = MODE_IDS[seed % MODE_IDS.length];          // every mode
   const level = Math.floor(seed / 7) % 3;                 // easy, normal and hard bots
-  const g = new Game({ players: 2, seed, stacking: seed % 3 !== 0, mode });
+  const players = seed <= 600 ? 2 : 3 + (seed % 8);
+  const g = new Game({ players, seed, stacking: seed % 3 !== 0, mode });
   g.start();
   const moves = [];
   let guard = 0;
@@ -19,11 +21,12 @@ for (let seed = 1; seed <= 600; seed++) {
     const m = chooseMove(g, p, level);
     const err = applyMove(g, p, m);
     if (err) { moves.push('ERR'); break; }
-    if (m.type === 'play') moves.push(`${p}p${m.card}c${m.color}${m.uno ? 'u' : ''}`);
+    if (m.type === 'play') moves.push(`${p}p${m.card}c${m.color}${m.uno ? 'u' : ''}${m.target >= 0 ? 't' + m.target : ''}`);
     else if (m.type === 'roulette') moves.push(`${p}r${m.color}`);
     else if (m.type === 'dare') moves.push(`${p}x${m.ok ? 1 : 0}`);
     else moves.push(`${p}${m.type[0]}`);
   }
-  lines.push(`${seed} ${mode} w${g.winner} pts${g.points} s${g.side} h${g.hands.map(h => h.length).join('/')} ${moves.join(' ')}`);
+  const outs = players > 2 ? ` o${g.out.map(o => (o ? 1 : 0)).join('')}` : '';
+  lines.push(`${seed} ${mode} w${g.winner} pts${g.points} s${g.side} h${g.hands.map(h => h.length).join('/')}${outs} ${moves.join(' ')}`);
 }
 process.stdout.write(lines.join('\n') + '\n');

@@ -37,12 +37,32 @@ function isSwap(game, f) {
   return f.k === K.SWAP || (game.cfg.sevenZero && f.k === K.NUM && (f.n === 7 || f.n === 0));
 }
 
+// The opponent closest to winning (fewest cards; ties go to whoever plays first from p).
+// Used as the target of swaps and targeted draws; with two players it is simply the opponent.
+function fewestCards(game, p) {
+  let best = -1;
+  for (let t = game.next(p), guard = 0; t !== p && guard < game.n; t = game.next(t), guard++)
+    if (best < 0 || game.hands[t].length < game.hands[best].length) best = t;
+  return best;
+}
+
+// The player who passes their hand to p when a No Mercy 0 rotates hands (the one before p).
+function previousPlayer(game, p) {
+  let prev = p;
+  for (let t = game.next(p), guard = 0; t !== p && guard < game.n; t = game.next(t), guard++) prev = t;
+  return prev;
+}
+
 function scoreCard(game, p, id, oppCount) {
   const f = game.face(id);
   const hand = game.hands[p];
   let sameColor = 0;
   for (const h of hand) if (h !== id && game.face(h).c === f.c) sameColor++;
-  if (isSwap(game, f)) return hand.length - 1 > oppCount ? 45 : -20;
+  if (isSwap(game, f)) {
+    const rotates = f.k === K.NUM && f.n === 0 && game.activeCount() > 2;
+    const from = rotates ? previousPlayer(game, p) : fewestCards(game, p);
+    return hand.length - 1 > game.hands[from].length ? 45 : -20;
+  }
   if (game.cfg.allWild) {
     if (f.k === K.WILD_DRAW) return oppCount <= 3 ? 40 : 16;
     if (f.k === K.TARGET_DRAW) return 18;
@@ -117,12 +137,13 @@ function chooseMove(game, p, level = LEVEL.HARD) {
   let color = -1;
   if (f.c === WILDC && !game.cfg.allWild) color = level === LEVEL.EASY && game.rng() < 0.5 ? game.randInt(4) : bestColor(game, hand, pick);
   const uno = hand.length === 2 ? game.rng() < UNO_CHANCE[level] : false;
-  return { type: 'play', card: pick, color, uno };
+  const target = game.needsTarget(f) ? fewestCards(game, p) : -1;
+  return { type: 'play', card: pick, color, uno, target };
 }
 
 function applyMove(game, p, move) {
   switch (move.type) {
-    case 'play': return game.play(p, move.card, move.color, move.uno);
+    case 'play': return game.play(p, move.card, move.color, move.uno, undefined, move.target);
     case 'draw': return game.draw(p);
     case 'roulette': return game.roulette(p, move.color);
     case 'dare': return game.dare(p, move.ok);
@@ -130,4 +151,4 @@ function applyMove(game, p, move) {
   }
 }
 
-module.exports = { chooseMove, applyMove, bestColor, clampLevel, LEVEL, CATCH_CHANCE };
+module.exports = { chooseMove, applyMove, bestColor, fewestCards, clampLevel, LEVEL, CATCH_CHANCE };

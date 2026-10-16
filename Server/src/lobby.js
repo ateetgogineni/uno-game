@@ -5,6 +5,7 @@ const { MODE_IDS } = require('./cards');
 
 const PROTOCOL = 1;
 const AVATAR_COUNT = 12;
+const MIN_PLAYERS = 2, MAX_PLAYERS = 10;
 const BOT_NAMES = [
   'Maya_21', 'Rohan77', 'LunaPlays', 'Arjun.K', 'Zoe99', 'Kabir_xo', 'NinjaCat', 'Priya.S', 'LeoWins',
   'Aisha23', 'Dev_Rocks', 'Sana.M', 'Max_Ace', 'Ishaan07', 'Nora_UNO', 'Vikram_V', 'Ella.B', 'Kian88',
@@ -47,10 +48,10 @@ class Lobby {
   }
 
   onMessage(s, text) {
-    // Flood guard: at most 40 messages per 5 seconds.
+    // Flood guard: at most cfg.floodMax messages per 5 seconds.
     const now = Date.now();
     if (now - s.window > 5000) { s.window = now; s.count = 0; }
-    if (++s.count > 40) { s.ws.close(1008); return; }
+    if (++s.count > (this.cfg.floodMax || 40)) { s.ws.close(1008); return; }
 
     let msg;
     try { msg = JSON.parse(text); } catch (e) { return; }
@@ -61,6 +62,7 @@ class Lobby {
       case 'find':
         s.botLevel = Number.isInteger(msg.lvl) ? clampLevel(msg.lvl) : LEVEL.NORMAL;
         s.mode = MODE_IDS.includes(msg.mode) ? msg.mode : 'classic';
+        s.size = clampInt(msg.size, MIN_PLAYERS, MAX_PLAYERS);
         this.find(s);
         break;
       case 'cancel': this.dequeue(s); break;
@@ -86,24 +88,57 @@ class Lobby {
     this.send(s, { t: 'welcome', v: PROTOCOL, online: this.sessions.size, resumed });
   }
 
+  // Players waiting for the same mode and table size as s (one seat per player id).
+  waitingWith(s) {
+    const pids = new Set(s.pid ? [s.pid] : []);
+    const out = [];
+    for (const o of this.queue) {
+      if (o === s || !o.ws.open || o.mode !== s.mode || (o.size || 2) !== (s.size || 2)) continue;
+      if (o.pid && pids.has(o.pid)) continue;
+      if (o.pid) pids.add(o.pid);
+      out.push(o);
+    }
+    return out;
+  }
+
   find(s) {
     if (s.match && s.match.state !== 'over') return;
     s.match = null;
     if (this.queue.includes(s)) return;
-    const other = this.queue.find(o => o !== s && o.ws.open && o.mode === s.mode && (!s.pid || o.pid !== s.pid));
-    if (other) {
-      this.dequeue(other);
-      this.createMatch([this.humanSeat(other), this.humanSeat(s)], s.mode);
+    const size = s.size || 2;
+    const others = this.waitingWith(s);
+    if (others.length + 1 >= size) {
+      const take = others.slice(0, size - 1);
+      take.forEach(o => this.dequeue(o));
+      this.startTable([...take, s], size, s.mode);
       return;
     }
     this.queue.push(s);
-    this.send(s, { t: 'queued', online: this.sessions.size });
+    this.send(s, { t: 'queued', online: this.sessions.size, size });
+    // Nobody (or not enough people) around: bots fill the empty seats.
     const wait = this.cfg.botAfterMs + Math.floor(Math.random() * this.cfg.botJitterMs);
     s.botTimer = setTimeout(() => {
       if (!this.queue.includes(s)) return;
+      const take = this.waitingWith(s).slice(0, size - 1);
       this.dequeue(s);
-      this.createMatch([this.humanSeat(s), this.makeBot([s.avatar], s.botLevel)], s.mode);
+      take.forEach(o => this.dequeue(o));
+      this.startTable([s, ...take], size, s.mode);
     }, wait);
+  }
+
+  startTable(humans, size, mode) {
+    const seats = humans.map(h => this.humanSeat(h));
+    const levels = humans.map(h => (Number.isInteger(h.botLevel) ? h.botLevel : LEVEL.NORMAL));
+    const level = Math.min(...levels);
+    while (seats.length < size) seats.push(this.makeBot(seats.map(x => x.avatar), level, seats.map(x => x.name)));
+    if (size > 2) {
+      // Random seating, so friends who queue together don't always sit side by side.
+      for (let i = seats.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = seats[i]; seats[i] = seats[j]; seats[j] = t;
+      }
+    }
+    return this.createMatch(seats, mode);
   }
 
   dequeue(s) {
@@ -117,10 +152,12 @@ class Lobby {
     return { name: s.name, avatar: s.avatar, pid: s.pid, bot: false, session: s };
   }
 
-  makeBot(takenAvatars, level = LEVEL.NORMAL) {
+  makeBot(takenAvatars, level = LEVEL.NORMAL, takenNames = []) {
     let avatar;
-    do { avatar = Math.floor(Math.random() * AVATAR_COUNT); } while (takenAvatars.includes(avatar));
-    const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
+    do { avatar = Math.floor(Math.random() * AVATAR_COUNT); } while (takenAvatars.includes(avatar) && takenAvatars.length < AVATAR_COUNT);
+    const free = BOT_NAMES.filter(n => !takenNames.includes(n));
+    const pool = free.length ? free : BOT_NAMES;
+    const name = pool[Math.floor(Math.random() * pool.length)];
     return { name, avatar, pid: '', bot: true, session: null, level: clampLevel(level) };
   }
 
@@ -158,4 +195,4 @@ class Lobby {
   }
 }
 
-module.exports = { Lobby, cleanName, AVATAR_COUNT, PROTOCOL };
+module.exports = { Lobby, cleanName, AVATAR_COUNT, PROTOCOL, MIN_PLAYERS, MAX_PLAYERS };

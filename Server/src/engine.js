@@ -50,6 +50,7 @@ class Game {
     this.hands = [];
     for (let i = 0; i < players; i++) this.hands.push([]);
     this.skips = new Array(players).fill(0); // turns each player still has to miss
+    this.out = new Array(players).fill(false); // knocked out (No Mercy 25 cards) or left a 3+ player game
     this.drawPile = [];   // top of pile = last element
     this.discard = [];    // top of pile = last element
     this.side = 0;        // UNO Flip: 0 light, 1 dark
@@ -86,7 +87,31 @@ class Game {
   face(id) { const d = this.deck[id]; return this.side === 1 && d.b ? d.b : d.a; }
   otherFace(id) { const d = this.deck[id]; return d.b ? (this.side === 1 ? d.a : d.b) : null; }
   top() { return this.discard[this.discard.length - 1]; }
-  next(p) { return (p + this.dir + this.n) % this.n; }
+  // Next player still in the game, in the direction of play.
+  next(p) {
+    let t = p;
+    for (let i = 0; i < this.n; i++) {
+      t = (t + this.dir + this.n) % this.n;
+      if (!this.out[t]) return t;
+    }
+    return t;
+  }
+
+  activeCount() {
+    let c = 0;
+    for (let i = 0; i < this.n; i++) if (!this.out[i]) c++;
+    return c;
+  }
+
+  // 3+ players: Swap / Trade Hands, the No Mercy 7 and Targeted Draw let the player pick who.
+  needsTarget(f) {
+    if (this.activeCount() <= 2) return false;
+    return f.k === K.SWAP || f.k === K.TARGET_DRAW || (this.cfg.sevenZero && f.k === K.NUM && f.n === 7);
+  }
+
+  validTarget(p, t) {
+    return Number.isInteger(t) && t >= 0 && t < this.n && t !== p && !this.out[t];
+  }
 
   // A card with no effect, so the game can start on it.
   isPlain(f) { return f.k === K.NUM || (this.cfg.allWild && f.k === K.WILD); }
@@ -206,15 +231,41 @@ class Game {
     this.emit({ k: 'swap', p: a, n: b });
   }
 
+  // No Mercy 0 with 3+ players: everyone passes their hand on in the direction of play.
+  rotateHands(p) {
+    const order = [p];
+    for (let t = this.next(p); t !== p && order.length < this.n; t = this.next(t)) order.push(t);
+    const moved = order.map(s => this.hands[s]);
+    for (let i = 0; i < order.length; i++) this.hands[order[(i + 1) % order.length]] = moved[i];
+    this.emit({ k: 'rotate', p, dir: this.dir });
+  }
+
+  // A player leaves a game of 3+: their cards go to the bottom of the draw pile and play goes on.
+  // Returns true when only one player is left (who then wins).
+  eliminate(p, reason) {
+    this.out[p] = true;
+    this.skips[p] = 0;
+    const cards = this.hands[p];
+    this.hands[p] = [];
+    this.shuffle(cards);
+    this.drawPile.unshift(...cards);
+    this.emit({ k: 'out', p, n: cards.length, reason });
+    if (this.activeCount() > 1) return false;
+    this.finish(this.next(p), reason);
+    return true;
+  }
+
   // No Mercy: a hand of 25+ cards is out. Returns true when that ended the game.
   checkMercy() {
     if (!this.cfg.mercy || this.over) return false;
     for (let i = 0; i < this.n; i++) {
-      if (this.hands[i].length >= this.cfg.mercy) {
-        this.emit({ k: 'mercy', p: i, n: this.hands[i].length });
-        this.finish((i + 1) % this.n, 'mercy');
+      if (this.out[i] || this.hands[i].length < this.cfg.mercy) continue;
+      this.emit({ k: 'mercy', p: i, n: this.hands[i].length });
+      if (this.activeCount() <= 2) {
+        this.finish(this.next(i), 'mercy');
         return true;
       }
+      if (this.eliminate(i, 'mercy')) return true;
     }
     return false;
   }
@@ -223,7 +274,7 @@ class Game {
   // Returns true when that ended the game.
   checkStalemate(idle) {
     this.idleTurns = idle ? this.idleTurns + 1 : 0;
-    if (this.idleTurns < this.n) return false;
+    if (this.idleTurns < this.activeCount()) return false;
     this.finishByCount('stalemate');
     return true;
   }
@@ -232,6 +283,7 @@ class Game {
     let best = this.turn, bestCount = Infinity, bestPts = Infinity;
     for (let i = 0; i < this.n; i++) {
       const p = (this.turn + i) % this.n;
+      if (this.out[p]) continue;
       const count = this.hands[p].length;
       let pts = 0;
       for (const id of this.hands[p]) pts += points(this.mode, this.face(id), this.side);
@@ -269,7 +321,8 @@ class Game {
   }
 
   // forgive: the player forgot UNO but nobody caught it (bot opponents don't always notice).
-  play(p, id, chosen, uno, forgive) {
+  // target: who a Swap / Trade Hands / No Mercy 7 / Targeted Draw goes to (3+ players; defaults to the next player).
+  play(p, id, chosen, uno, forgive, target) {
     if (this.over) return 'game over';
     if (p !== this.turn) return 'not your turn';
     const hand = this.hands[p];
@@ -306,11 +359,17 @@ class Game {
     }
 
     const t = this.next(p);
+    const tgt = this.needsTarget(f) && this.validTarget(p, target) ? target : t;
     switch (f.k) {
       case K.SKIP:
-      case K.SKIP_ALL:
         this.emit({ k: 'skip', p: t });
         this.skips[t]++;
+        break;
+      case K.SKIP_ALL:
+        for (let i = t, guard = 0; i !== p && guard < this.n; i = this.next(i), guard++) {
+          this.emit({ k: 'skip', p: i });
+          this.skips[i]++;
+        }
         break;
       case K.SKIP_TWO:
         this.emit({ k: 'skip', p: t, n: 2 });
@@ -353,20 +412,21 @@ class Game {
         this.flipDeck();
         break;
       case K.TARGET_DRAW:
-        this.forcedDraw(t, f.n);
+        this.forcedDraw(tgt, f.n);
         break;
       case K.SWAP:
-        this.swapHands(p, t);
+        this.swapHands(p, tgt);
         break;
       case K.NUM:
-        if (swaps) this.swapHands(p, t);
+        if (swaps && f.n === 0 && this.activeCount() > 2) this.rotateHands(p);
+        else if (swaps) this.swapHands(p, tgt);
         break;
       case K.HIT:
         for (let i = 0; i < f.n && !this.over; i++) this.hitLauncher(t);
         this.skips[t]++;
         break;
       case K.HIT_ALL:
-        for (let i = 0; i < this.n; i++) if (i !== p) this.hitLauncher(i);
+        for (let i = 0; i < this.n; i++) if (i !== p && !this.out[i]) this.hitLauncher(i);
         break;
       case K.HIT_FIRE:
         for (let guard = 0; guard < 25; guard++) if (this.hitLauncher(t).length > 0 || this.drawPile.length + this.discard.length <= 1) break;
@@ -385,7 +445,7 @@ class Game {
     // Someone with no cards left wins (a swap can hand the win to the other player).
     for (let i = 0; i < this.n; i++) {
       const w = (p + i) % this.n;
-      if (this.hands[w].length !== 0) continue;
+      if (this.out[w] || this.hands[w].length !== 0) continue;
       if (this.pendingKind === 'stack' && this.pending > 0) {
         // A final draw card still makes the next player draw; those cards count for points.
         const victim = this.next(w);
@@ -432,6 +492,7 @@ class Game {
     else got = this.drawCards(p, 1);
     this.emit({ k: 'draw', p, n: got.length, cards: got, forced: 0 });
     if (this.checkMercy()) return null;
+    if (this.out[p]) { this.endTurn(p); return null; }
     if (this.checkStalemate(deckEmpty && got.length === 0)) return null;
     const last = got.length ? got[got.length - 1] : -1;
     if (last >= 0 && this.isPlayable(p, last)) {
@@ -503,14 +564,36 @@ class Game {
     this.emit({ k: 'win', p: winner, pts, reason: reason || 'cards' });
   }
 
+  // A player leaves or idles out. Two players left: the other one wins. More: the game goes on without them.
   forfeit(loser, reason) {
-    if (this.over) return;
-    this.finish((loser + 1) % this.n, reason || 'forfeit');
+    if (this.over || this.out[loser]) return;
+    reason = reason || 'forfeit';
+    if (this.activeCount() <= 2) {
+      let w = (loser + 1) % this.n;
+      for (let g = 0; g < this.n && (w === loser || this.out[w]); g++) w = (w + 1) % this.n;
+      this.finish(w, reason);
+      return;
+    }
+    const wasTurn = this.turn === loser;
+    if (this.eliminate(loser, reason)) return;
+    if (wasTurn) {
+      this.pending = 0;
+      this.lastDraw = 0;
+      this.pendingKind = '';
+      this.dareAmount = 0;
+      this.endTurn(loser);
+    }
+  }
+
+  // UNO Flip: the other side of every opponent's cards, seat by seat from the one after you.
+  othersFaces(seat) {
+    const r = [];
+    for (let k = 1; k < this.n; k++) for (const id of this.hands[(seat + k) % this.n]) r.push(faceCode(this.otherFace(id)));
+    return r;
   }
 
   view(seat) {
     const mine = this.turn === seat;
-    const opp = (seat + 1) % this.n;
     const flip = !!this.cfg.flip;
     return {
       you: seat,
@@ -518,6 +601,7 @@ class Game {
       side: this.side,
       hand: this.hands[seat].slice(),
       counts: this.hands.map(h => h.length),
+      out: this.out.map(o => (o ? 1 : 0)),
       top: this.top(),
       color: this.color,
       dir: this.dir,
@@ -530,8 +614,8 @@ class Game {
       drawn: mine ? this.drawnCard : -1,
       legal: mine ? this.legalMoves(seat) : [],
       pile: this.drawPile.length,
-      // UNO Flip: you can see the other side of your opponent's cards and of the top of the draw pile.
-      oppFaces: flip ? this.hands[opp].map(id => faceCode(this.otherFace(id))) : [],
+      // UNO Flip: you can see the other side of your opponents' cards and of the top of the draw pile.
+      oppFaces: flip ? this.othersFaces(seat) : [],
       pileFace: flip && this.drawPile.length ? faceCode(this.otherFace(this.drawPile[this.drawPile.length - 1])) : -1,
       over: this.over ? 1 : 0,
       winner: this.winner,

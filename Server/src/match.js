@@ -6,8 +6,8 @@ const { chooseMove, applyMove, clampLevel, CATCH_CHANCE } = require('./bot');
 // Emote ids shared with the client (EmoteId in C#).
 const EMOTE = { HAPPY: 0, LAUGH: 1, COOL: 2, WOW: 3, ANGRY: 4, SAD: 5 };
 
-// One 1v1 game. Seats are humans (with a lobby session) or bots. The server owns the game state;
-// clients only send intents (play/draw/pass) and animate the events they get back.
+// One game of 2 to 10 players. Seats are humans (with a lobby session) or bots. The server owns the game
+// state; clients only send intents (play/draw/pass) and animate the events they get back.
 class Match {
   constructor(lobby, seats, cfg, mode = 'classic') {
     this.mode = mode;
@@ -77,6 +77,7 @@ class Match {
     }
     this.botReactions(events);
     if (this.game.over) this.end();
+    else if (!this.seats.some((s, i) => !s.bot && s.session && !this.game.out[i])) this.abandon('no players left');
   }
 
   sendSync(seat) {
@@ -96,7 +97,8 @@ class Match {
       else if (ev.k === 'roulette') ms += 400 + 200 * ev.n;
       else if (ev.k === 'discardAll') ms += 250 * ev.n;
       else if (ev.k === 'flip') ms += 1000;
-      else if (ev.k === 'swap') ms += 900;
+      else if (ev.k === 'swap' || ev.k === 'rotate') ms += 900;
+      else if (ev.k === 'out') ms += 700;
       else if (ev.k === 'dare' || ev.k === 'darePending' || ev.k === 'roulettePending') ms += 400;
     }
     return ms * (this.cfg.animScale === undefined ? 1 : this.cfg.animScale);
@@ -113,7 +115,9 @@ class Match {
     this.deadline = Date.now() + anim + len;
     this.turnTimer = setTimeout(() => this.onTimeout(), anim + len + this.cfg.latencyGraceMs);
     if (seat.bot) {
-      const think = this.cfg.botThinkMs + Math.floor(Math.random() * this.cfg.botThinkJitterMs);
+      // Big tables move a bit quicker so the wait for your next turn stays short.
+      const pace = this.seats.length > 4 ? 0.75 : 1;
+      const think = Math.round((this.cfg.botThinkMs + Math.floor(Math.random() * this.cfg.botThinkJitterMs)) * pace);
       this.botTimer = setTimeout(() => this.botAct(), anim + think);
     }
   }
@@ -147,9 +151,11 @@ class Match {
     let err;
     if (msg.t === 'play') {
       const color = Number.isInteger(msg.color) ? msg.color : -1;
-      const opp = this.seats[(seat + 1) % this.seats.length];
-      const forgive = !msg.uno && opp.bot && Math.random() >= CATCH_CHANCE[clampLevel(opp.level)];
-      err = this.game.play(seat, msg.card | 0, color, !!msg.uno, forgive);
+      const target = Number.isInteger(msg.target) ? msg.target : -1;
+      // A forgotten UNO goes unpunished only if nobody notices: every opponent is a bot and each one misses it.
+      const others = this.seats.filter((s, i) => i !== seat && !this.game.out[i]);
+      const forgive = !msg.uno && others.every(s => s.bot) && others.every(s => Math.random() >= CATCH_CHANCE[clampLevel(s.level)]);
+      err = this.game.play(seat, msg.card | 0, color, !!msg.uno, forgive, target);
     } else if (msg.t === 'draw') err = this.game.draw(seat);
     else if (msg.t === 'pass') err = this.game.pass(seat);
     else if (msg.t === 'roulette') err = this.game.roulette(seat, Number.isInteger(msg.color) ? msg.color : -1);
@@ -194,8 +200,9 @@ class Match {
     if (!s) return;
     if (this.state === 'waiting') { this.replaceWithBot(seat); return; }
     if (this.state === 'playing') {
-      this.lobby.log(`match ${this.id}: ${s.name} left`);
       this.detach(seat);
+      if (this.game.out[seat]) return; // already out of this game, just watching
+      this.lobby.log(`match ${this.id}: ${s.name} left`);
       this.game.forfeit(seat, 'left');
       this.flush();
     }
@@ -230,6 +237,7 @@ class Match {
       if (this.state !== 'playing' || s.connected) return;
       this.lobby.log(`match ${this.id}: ${s.name} did not come back, forfeits`);
       this.detach(seat);
+      if (this.game.out[seat]) return;
       this.game.forfeit(seat, 'left');
       this.flush();
     }, this.cfg.reconnectGraceMs);
@@ -259,6 +267,21 @@ class Match {
     }
     const w = this.seats[this.game.winner];
     this.lobby.log(`match ${this.id} over: ${w ? w.name : '?'} wins (${this.game.points} pts)`);
+    this.lobby.matchEnded(this);
+  }
+
+  // Only bots are left (every person left or was knocked out): stop without a winner.
+  abandon(why) {
+    if (this.state === 'over') return;
+    this.state = 'over';
+    clearTimeout(this.turnTimer);
+    clearTimeout(this.botTimer);
+    clearTimeout(this.readyTimer);
+    for (const s of this.seats) {
+      clearTimeout(s.graceTimer);
+      if (s.session) { s.session.match = null; s.session.seat = -1; }
+    }
+    this.lobby.log(`match ${this.id} stopped: ${why}`);
     this.lobby.matchEnded(this);
   }
 

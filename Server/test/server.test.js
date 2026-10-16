@@ -9,6 +9,7 @@ const FAST = {
   botAfterMs: 300, botJitterMs: 100, turnMs: 3000, offlineTurnMs: 500, readyTimeoutMs: 3000,
   reconnectGraceMs: 800, botThinkMs: 10, botThinkJitterMs: 10, latencyGraceMs: 50,
   animScale: 0, // don't wait for client animations in tests
+  floodMax: 1e6, // scripted clients answer instantly, far faster than people
 };
 
 async function startServer(over = {}) {
@@ -243,5 +244,34 @@ test('health endpoint and malformed input', async () => {
     assert.strictEqual(s.name, 'scriptalert1sc'); // stripped to safe characters, max 14
     assert.strictEqual(s.avatar, 11);
     a.ws.close();
+  } finally { await srv.shutdown(); }
+});
+
+test('tables of 3 to 10: people asking for the same size sit together and bots fill the rest', async () => {
+  const srv = await startServer({ botAfterMs: 500 });
+  try {
+    const a = new Client(srv.url, 'Ana', { autoplay: false });
+    const b = new Client(srv.url, 'Ben', { autoplay: false });
+    const c = new Client(srv.url, 'Cal', { autoplay: false });
+    await Promise.all([a.opened, b.opened, c.opened]);
+    a.send({ t: 'hello', name: 'Ana', pid: 'pid-a' });
+    b.send({ t: 'hello', name: 'Ben', pid: 'pid-b' });
+    c.send({ t: 'hello', name: 'Cal', pid: 'pid-c' });
+    a.send({ t: 'find', mode: 'classic', size: 4 });
+    b.send({ t: 'find', mode: 'classic', size: 4 });
+    c.send({ t: 'find', mode: 'classic', size: 3 });   // different size: a table of its own
+    const [ma, mb, mc] = await Promise.all([a, b, c].map(x => x.waitFor(m => m.t === 'matched')));
+    assert.strictEqual(ma.match, mb.match, 'same size sits together');
+    assert.notStrictEqual(ma.match, mc.match);
+    assert.strictEqual(ma.players.length, 4);
+    assert.strictEqual(mc.players.length, 3);
+    assert.strictEqual(new Set(ma.players.map(p => p.name)).size, 4, 'every name at the table is different');
+    assert.notStrictEqual(ma.seat, mb.seat);
+    // the game runs to the end with the two people playing and two bots
+    a.autoplay = b.autoplay = true;
+    a.send({ t: 'ready' }); b.send({ t: 'ready' });
+    const over = await a.waitFor(m => m.t === 'up' && m.st.over === 1, 30000);
+    assert.strictEqual(over.st.counts.length, 4);
+    a.ws.close(); b.ws.close(); c.ws.close();
   } finally { await srv.shutdown(); }
 });

@@ -21,6 +21,7 @@ const defaults = {
   botThinkMs: num('BOT_THINK_MS', 900),
   botThinkJitterMs: num('BOT_THINK_JITTER_MS', 900),
   idleKickMs: 45000,
+  floodMax: 40,                                  // messages a client may send per 5 seconds
   stacking: process.env.STACKING !== '0',       // +2/+4 stacking, as in the reference game
 };
 
