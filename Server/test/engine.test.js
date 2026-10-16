@@ -29,8 +29,8 @@ function scenario({ hands, top, color, turn = 0, stacking = true }) {
 
 function checkConservation(g) {
   const all = [...g.drawPile, ...g.discard, ...g.hands.flat()];
-  assert.strictEqual(all.length, 108, 'card count');
-  assert.strictEqual(new Set(all).size, 108, 'duplicate card');
+  assert.strictEqual(all.length, g.deck.length, 'card count');
+  assert.strictEqual(new Set(all).size, g.deck.length, 'duplicate card');
 }
 
 test('deck has the official 108 cards', () => {

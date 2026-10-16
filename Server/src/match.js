@@ -1,6 +1,6 @@
-﻿'use strict';
+'use strict';
 const crypto = require('crypto');
-const { Game, cardOf, DRAW2, WILD4 } = require('./engine');
+const { Game } = require('./engine');
 const { chooseMove, applyMove, clampLevel, CATCH_CHANCE } = require('./bot');
 
 // Emote ids shared with the client (EmoteId in C#).
@@ -9,7 +9,8 @@ const EMOTE = { HAPPY: 0, LAUGH: 1, COOL: 2, WOW: 3, ANGRY: 4, SAD: 5 };
 // One 1v1 game. Seats are humans (with a lobby session) or bots. The server owns the game state;
 // clients only send intents (play/draw/pass) and animate the events they get back.
 class Match {
-  constructor(lobby, seats, cfg) {
+  constructor(lobby, seats, cfg, mode = 'classic') {
+    this.mode = mode;
     this.lobby = lobby;
     this.cfg = cfg;
     this.id = crypto.randomBytes(6).toString('hex');
@@ -41,7 +42,7 @@ class Match {
       if (!s.session) return;
       s.session.match = this;
       s.session.seat = i;
-      this.sendTo(i, { t: 'matched', match: this.id, seat: i, players: this.playersInfo() });
+      this.sendTo(i, { t: 'matched', match: this.id, seat: i, mode: this.mode, players: this.playersInfo() });
     });
     this.readyTimer = setTimeout(() => this.startGame(), this.cfg.readyTimeoutMs);
   }
@@ -57,7 +58,7 @@ class Match {
     if (this.state !== 'waiting') return;
     clearTimeout(this.readyTimer);
     this.state = 'playing';
-    this.game = new Game({ players: this.seats.length, seed: crypto.randomInt(1, 2 ** 31 - 1), stacking: this.cfg.stacking });
+    this.game = new Game({ players: this.seats.length, seed: crypto.randomInt(1, 2 ** 31 - 1), stacking: this.cfg.stacking, mode: this.mode });
     this.game.start();
     this.lobby.log(`match ${this.id} started: ${this.seats.map(s => s.name + (s.bot ? ' (bot)' : '')).join(' vs ')}`);
     this.flush();
@@ -91,6 +92,12 @@ class Match {
       else if (ev.k === 'draw' || ev.k === 'unoPen') ms += 220 * Math.max(1, ev.n);
       else if (ev.k === 'play') ms += 450;
       else if (ev.k === 'reshuffle') ms += 600;
+      else if (ev.k === 'launch') ms += 500 + 200 * ev.n;
+      else if (ev.k === 'roulette') ms += 400 + 200 * ev.n;
+      else if (ev.k === 'discardAll') ms += 250 * ev.n;
+      else if (ev.k === 'flip') ms += 1000;
+      else if (ev.k === 'swap') ms += 900;
+      else if (ev.k === 'dare' || ev.k === 'darePending' || ev.k === 'roulettePending') ms += 400;
     }
     return ms * (this.cfg.animScale === undefined ? 1 : this.cfg.animScale);
   }
@@ -145,6 +152,8 @@ class Match {
       err = this.game.play(seat, msg.card | 0, color, !!msg.uno, forgive);
     } else if (msg.t === 'draw') err = this.game.draw(seat);
     else if (msg.t === 'pass') err = this.game.pass(seat);
+    else if (msg.t === 'roulette') err = this.game.roulette(seat, Number.isInteger(msg.color) ? msg.color : -1);
+    else if (msg.t === 'dare') err = this.game.dare(seat, !!msg.ok);
     else return;
     if (err) {
       this.sendTo(seat, { t: 'err', msg: err });
@@ -170,7 +179,7 @@ class Match {
       let e = -1;
       for (const ev of events) {
         if (ev.k === 'win') e = ev.p === i ? (Math.random() < 0.5 ? EMOTE.HAPPY : EMOTE.COOL) : EMOTE.SAD;
-        else if (ev.k === 'play' && ev.p === i && (cardOf(ev.card).v === WILD4 || cardOf(ev.card).v === DRAW2)) e = EMOTE.LAUGH;
+        else if (ev.k === 'stack' && this.game.turn !== i) e = EMOTE.LAUGH;
         else if (ev.k === 'draw' && ev.p === i && ev.n >= 4) e = Math.random() < 0.5 ? EMOTE.ANGRY : EMOTE.WOW;
       }
       if (e < 0 || Math.random() > 0.35) continue;
@@ -206,7 +215,7 @@ class Match {
     const bot = this.lobby.makeBot(this.seats.filter((x, i) => i !== seat).map(x => x.avatar), human ? human.session.botLevel : undefined);
     this.seats[seat] = Object.assign(s, bot, { connected: false, ready: true });
     // Tell the other players who they are playing now.
-    this.seats.forEach((x, i) => { if (i !== seat && x.session) this.sendTo(i, { t: 'matched', match: this.id, seat: i, players: this.playersInfo() }); });
+    this.seats.forEach((x, i) => { if (i !== seat && x.session) this.sendTo(i, { t: 'matched', match: this.id, seat: i, mode: this.mode, players: this.playersInfo() }); });
     if (this.state === 'waiting' && this.seats.every(x => x.bot || x.ready)) this.startGame();
   }
 

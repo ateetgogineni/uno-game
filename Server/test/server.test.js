@@ -184,6 +184,47 @@ test('a player who reconnects in time gets the game back', async () => {
   } finally { await srv.shutdown(); }
 });
 
+test('players are only matched within the same game mode, and every mode plays to the end', async () => {
+  const srv = await startServer({ botAfterMs: 400 });
+  try {
+    const flip = new Client(srv.url, 'Flipper', { autoplay: false });
+    const mercy = new Client(srv.url, 'Mercy', { autoplay: false });
+    await Promise.all([flip.opened, mercy.opened]);
+    flip.send({ t: 'hello', name: 'Flipper', pid: 'pid-f' });
+    mercy.send({ t: 'hello', name: 'Mercy', pid: 'pid-m' });
+    flip.send({ t: 'find', mode: 'flip', lvl: 0 });
+    mercy.send({ t: 'find', mode: 'nomercy', lvl: 0 });
+    const [mf, mm] = await Promise.all([flip.waitFor(m => m.t === 'matched'), mercy.waitFor(m => m.t === 'matched')]);
+    assert.notStrictEqual(mf.match, mm.match, 'different modes never meet');
+    assert.strictEqual(mf.mode, 'flip');
+    assert.strictEqual(mm.mode, 'nomercy');
+    flip.ws.close(); mercy.ws.close();
+
+    // A client that plays the first legal card the server lists (and resolves dares/roulettes).
+    for (const mode of ['flip', 'nomercy', 'allwild', 'attack', 'dare']) {
+      const c = new Client(srv.url, 'Player', { autoplay: false });
+      await c.opened;
+      c.send({ t: 'hello', name: 'Player', pid: 'pid-' + mode });
+      c.send({ t: 'find', mode, lvl: 2 });
+      await c.waitFor(m => m.t === 'matched' && m.mode === mode);
+      c.ws.onmessage = e => {
+        const m = JSON.parse(e.data);
+        c.onMessage(m);
+        const st = m.st;
+        if (!st || st.over || st.turn !== st.you) return;
+        if (st.pendingKind === 'roulette') c.send({ t: 'roulette', color: 0 });
+        else if (st.pendingKind === 'dare') c.send({ t: 'dare', ok: false });
+        else if (st.legal.length) c.send({ t: 'play', card: st.legal[0], color: 0, uno: st.hand.length === 2 });
+        else c.send({ t: st.hasDrawn ? 'pass' : 'draw' });
+      };
+      c.send({ t: 'ready' });
+      const over = await c.waitFor(m => m.t === 'up' && m.st.over === 1, 30000);
+      assert.strictEqual(over.st.mode, mode);
+      c.ws.close();
+    }
+  } finally { await srv.shutdown(); }
+});
+
 test('health endpoint and malformed input', async () => {
   const srv = await startServer();
   try {

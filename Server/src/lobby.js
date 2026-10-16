@@ -1,6 +1,7 @@
 'use strict';
 const { Match } = require('./match');
 const { clampLevel, LEVEL } = require('./bot');
+const { MODE_IDS } = require('./cards');
 
 const PROTOCOL = 1;
 const AVATAR_COUNT = 12;
@@ -57,11 +58,15 @@ class Lobby {
     const m = s.match;
     switch (msg.t) {
       case 'hello': this.hello(s, msg); break;
-      case 'find': s.botLevel = Number.isInteger(msg.lvl) ? clampLevel(msg.lvl) : LEVEL.NORMAL; this.find(s); break;
+      case 'find':
+        s.botLevel = Number.isInteger(msg.lvl) ? clampLevel(msg.lvl) : LEVEL.NORMAL;
+        s.mode = MODE_IDS.includes(msg.mode) ? msg.mode : 'classic';
+        this.find(s);
+        break;
       case 'cancel': this.dequeue(s); break;
       case 'ready': if (m) m.ready(s.seat); break;
       case 'sync': if (m) m.sendSync(s.seat); break;
-      case 'play': case 'draw': case 'pass': if (m) m.action(s.seat, msg); break;
+      case 'play': case 'draw': case 'pass': case 'roulette': case 'dare': if (m) m.action(s.seat, msg); break;
       case 'emote': if (m) m.emote(s.seat, msg.e | 0); break;
       case 'leave': if (m) m.leave(s.seat); break;
       case 'ping': this.send(s, { t: 'pong', online: this.sessions.size }); break;
@@ -85,10 +90,10 @@ class Lobby {
     if (s.match && s.match.state !== 'over') return;
     s.match = null;
     if (this.queue.includes(s)) return;
-    const other = this.queue.find(o => o !== s && o.ws.open && (!s.pid || o.pid !== s.pid));
+    const other = this.queue.find(o => o !== s && o.ws.open && o.mode === s.mode && (!s.pid || o.pid !== s.pid));
     if (other) {
       this.dequeue(other);
-      this.createMatch([this.humanSeat(other), this.humanSeat(s)]);
+      this.createMatch([this.humanSeat(other), this.humanSeat(s)], s.mode);
       return;
     }
     this.queue.push(s);
@@ -97,7 +102,7 @@ class Lobby {
     s.botTimer = setTimeout(() => {
       if (!this.queue.includes(s)) return;
       this.dequeue(s);
-      this.createMatch([this.humanSeat(s), this.makeBot([s.avatar], s.botLevel)]);
+      this.createMatch([this.humanSeat(s), this.makeBot([s.avatar], s.botLevel)], s.mode);
     }, wait);
   }
 
@@ -119,8 +124,8 @@ class Lobby {
     return { name, avatar, pid: '', bot: true, session: null, level: clampLevel(level) };
   }
 
-  createMatch(seats) {
-    const m = new Match(this, seats, this.cfg);
+  createMatch(seats, mode = 'classic') {
+    const m = new Match(this, seats, this.cfg, mode);
     this.matches.set(m.id, m);
     this.totalMatches++;
     m.begin();
