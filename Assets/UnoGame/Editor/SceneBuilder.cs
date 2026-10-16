@@ -81,7 +81,7 @@ namespace UnoGame.EditorTools
 
         static void BuildGame(CardView card)
         {
-            var root = NewCanvasScene(new Color(0.12f, 0.16f, 0.17f));
+            var root = NewCanvasScene(new Color(0.07f, 0.27f, 0.16f));
             var bg = UIKit.Img(root, "Background", ArtLibrary.I.bgTable, Color.white);
             bg.rectTransform.Fill();
             var fit = bg.gameObject.AddComponent<AspectRatioFitter>();

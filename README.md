@@ -1,8 +1,23 @@
 # UNO Game
 
-1v1 UNO for Android (Unity 6000.3.26f1) with six game modes, modelled on the Plato-style reference video:
-home screen with a mode list, a rules screen per mode, matchmaking over a WebSocket, a server-run game
-with bots filling in when nobody else is searching, and an offline bot match when the server can't be reached.
+UNO for Android (Unity 6000.3.26f1) for 2 to 10 players with six game modes, modelled on the Plato-style
+reference video: home screen with a mode list, a rules screen per mode (where you pick the table size),
+matchmaking over a WebSocket, a server-run game with bots filling the empty seats, and an offline bot game
+when the server can't be reached.
+
+## Tables
+
+| Players | Screen | Layout |
+|---|---|---|
+| 2 | portrait | the opponent's fan across the top (as in the reference video) |
+| 3 - 4 | portrait | compact seats beside and above the table |
+| 5 - 10 | landscape | seats spread along an arc over the table; chevrons on the arc show the direction of play |
+
+The phone turns to landscape behind the loading screen and back to portrait on the way home. At 3+
+players: Reverse turns play round (no skip), Skip Everyone skips every opponent, Swap / Trade Hands /
+the No Mercy 7 / Targeted Draw let you pick the player, the No Mercy 0 passes every hand on, the 25-card
+Mercy rule knocks out just that player (their cards go back under the draw pile), and a player who leaves
+is taken out while the rest play on.
 
 ## Game modes
 
@@ -50,14 +65,15 @@ cd Server && npm test                       # rules for every mode, bot games, r
 docker compose -f Server/docker-compose.yml up -d --build
 ```
 
-Players are matched only within the same mode. The app connects to `serverUrl` in `GameConfig.asset`
+Players are matched only within the same mode and table size; bots fill the empty seats after a few
+seconds. The app connects to `serverUrl` in `GameConfig.asset`
 (currently `ws://192.168.29.30:8090/`, home network only). For players anywhere, host the server at a
 public `wss://` address and update that field.
 
 ## Testing
 
-`Builds/Windows/UNO Game.exe -autopilot -games 6 -modes all -shots <dir>` plays one game of every mode
+`Builds/Windows/UNO Game.exe -autopilot -games 6 -modes all -players 2,5,10 -shots <dir>` plays one game of every mode
 by itself, saves screenshots and logs a `[LAYOUT]` overlap/off-screen report per screen.
 `-capture <dir> -supersize 2` records frames + audio for a video.
 `Checks.ParityDump` vs `node Server/test/parity-dump.js` proves the offline C# engine plays every mode
-exactly like the server (600 seeded games).
+exactly like the server (840 seeded games, 2 to 10 players).
