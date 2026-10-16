@@ -41,6 +41,8 @@ namespace UnoGame.Dev
             Add(items, "Discard", gc.discardPile);
             Add(items, "ArrowA", gc.arrowA);
             Add(items, "ArrowB", gc.arrowB);
+            Add(items, "ModeChip", gc.modeChip);
+            Add(items, "Launcher", gc.launcherImg.transform);
             for (int i = 0; i < 3; i++)
             {
                 var line = gc.log.lines[i];
@@ -64,6 +66,7 @@ namespace UnoGame.Dev
                 bool aOpp = a.StartsWith("OppCard"), bOpp = b.StartsWith("OppCard");
                 if ((aHand && bHand) || (aOpp && bOpp)) return false;      // cards in a fan overlap by design
                 if ((a == "DrawPile" && b == "Discard") || (a == "Discard" && b == "DrawPile")) return false;
+                if (a == "Launcher" || b == "Launcher") return !(a == "DrawPile" || b == "DrawPile" || a == "Discard" || b == "Discard");
                 if ((aOpp && (b == "BackButton" || b == "MenuButton")) || (bOpp && (a == "BackButton" || a == "MenuButton"))) return false;
                 return true;
             });
@@ -76,10 +79,9 @@ namespace UnoGame.Dev
             Add(items, "Wins", home.winsText.transform.parent);
             Add(items, "Sound", home.soundButton.transform);
             Add(items, "Logo", home.logo);
-            Add(items, "Play", home.playButton.transform);
             Add(items, "OnlineBadge", home.onlinePill);
-            Add(items, "HowHeader", home.howHeader);
-            for (int i = 0; i < home.tipCards.Length; i++) Add(items, "TipCard" + i, home.tipCards[i]);
+            Add(items, "ModesHeader", home.modesHeader);
+            for (int i = 0; i < home.modeTiles.Length; i++) Add(items, "ModeTile" + i, home.modeTiles[i]);
             Add(items, "Version", home.bottomInfo);
             Report("home", items, (a, b) => true);
         }
@@ -110,7 +112,7 @@ namespace UnoGame.Dev
                     problems++;
                     sb.AppendLine($"  OVERLAP {a.name} x {b.name} ({ow:0}x{oh:0}px)");
                 }
-            Debug.Log($"[LAYOUT] {screen} {Screen.width}x{Screen.height}: {(problems == 0 ? "OK" : problems + " problem(s)")}, {items.Count} elements checked\n{sb}");
+            Debug.Log($"[LAYOUT] {screen} {Core.Table.Mode} {Screen.width}x{Screen.height}: {(problems == 0 ? "OK" : problems + " problem(s)")}, {items.Count} elements checked\n{sb}");
         }
 
         static string Fmt(Rect r) => $"({r.xMin:0},{r.yMin:0})-({r.xMax:0},{r.yMax:0})";

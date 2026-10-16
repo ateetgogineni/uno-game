@@ -16,6 +16,7 @@ namespace UnoGame.Dev
     ///   -shots DIR            save screenshots at key moments + layout report
     ///   -capture DIR          save every frame at 30 fps (for the gameplay video)
     ///   -keepopen             do not quit at the end
+    ///   -modes a,b,c|all      game modes to play in turn (default classic)
     /// </summary>
     public sealed class AutoPilot : MonoBehaviour
     {
@@ -42,6 +43,11 @@ namespace UnoGame.Dev
         int channels = 2;
         readonly List<float> audioSamples = new List<float>();
         float startedAt;
+        string[] modes = { "classic" };
+        float infoSince = -1;
+        float dareSince = -1;
+
+        string CurrentMode => modes[played % modes.Length];
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Init()
@@ -59,6 +65,7 @@ namespace UnoGame.Dev
                 if (args[i] == "-capture" && next != null) ap.captureDir = next;
                 if (args[i] == "-keepopen") ap.keepOpen = true;
                 if (args[i] == "-supersize" && next != null) ap.superSize = Mathf.Clamp(int.Parse(next), 1, 4);
+                if (args[i] == "-modes" && next != null) ap.modes = next == "all" ? Decks.ModeIds : next.Split(',');
             }
             if (ap.shotsDir != null) Directory.CreateDirectory(ap.shotsDir);
             if (ap.captureDir != null)
@@ -78,7 +85,7 @@ namespace UnoGame.Dev
         void Shot(string name)
         {
             if (shotsDir == null) return;
-            string key = "g" + (played + 1) + "_" + name;
+            string key = "g" + (played + 1) + "_" + CurrentMode + "_" + name;
             if (!taken.Add(key)) return;
             ScreenCapture.CaptureScreenshot(Path.Combine(shotsDir, key + ".png"));
             Debug.Log("[AUTO] screenshot " + key);
@@ -107,7 +114,7 @@ namespace UnoGame.Dev
         void Update()
         {
             if (finished) return;
-            if (Now - startedAt > 60f * 8f * games)
+            if (Now - startedAt > 60f * 10f * games)
             {
                 Debug.LogError("[AUTO] timed out");
                 Finish(2);
@@ -141,14 +148,22 @@ namespace UnoGame.Dev
             if (!mm.IsOpen)
             {
                 if (played >= games) { Finish(0); return; }
+                mmSince = -1;
+                foundSince = -1;
+                if (home.modeInfo.IsOpen)
+                {
+                    if (infoSince < 0) infoSince = Now;
+                    if (Now - infoSince > 1.3f) Shot("01b_rules");
+                    if (Now - infoSince > 2.6f) { infoSince = -1; home.modeInfo.PlayNow(); }
+                    return;
+                }
+                infoSince = -1;
                 if (Now - homeSince > 1.6f)
                 {
                     Shot("01_home");
                     if (played == 0 && !homeAudited) { homeAudited = true; LayoutAudit.Home(home); }
                 }
-                if (Now - homeSince > 2.3f) home.OnPlay();
-                mmSince = -1;
-                foundSince = -1;
+                if (Now - homeSince > 2.3f) home.SelectMode(CurrentMode);
                 return;
             }
             if (mmSince < 0) mmSince = Now;
@@ -177,7 +192,7 @@ namespace UnoGame.Dev
                     played++;
                     turns = 0;
                     Debug.Log("[AUTO] game " + played + " finished");
-                    if (played < games) gc.PlayAgain();
+                    if (played < games && CurrentMode == modes[(played - 1) % modes.Length]) gc.PlayAgain();
                     else gc.GoHome();
                 }
                 return;
@@ -195,7 +210,21 @@ namespace UnoGame.Dev
                 return;
             }
 
+            if (gc.DareOpen)
+            {
+                if (dareSince < 0) dareSince = Now;
+                if (Now - dareSince > 0.8f) Shot("06b_dare");
+                if (Now - dareSince > 1.6f)
+                {
+                    dareSince = -1;
+                    gc.AutoDare(UnityEngine.Random.value < 0.8f, UnityEngine.Random.value < 0.65f);
+                }
+                return;
+            }
+            dareSince = -1;
+
             if (gc.State != null && taken.Count < 64 && gc.MyCards.Count > 0) Shot("04_dealt");
+            if (gc.State != null && gc.State.side == 1) Shot("04b_dark_side");
 
             if (!gc.CanAct) { thinkUntil = -1; return; }
             if (thinkUntil < 0) { thinkUntil = Now + UnityEngine.Random.Range(0.75f, 1.35f); return; }
@@ -205,7 +234,7 @@ namespace UnoGame.Dev
             if (turns == 2)
             {
                 Shot("05_my_turn");
-                if (played == 0) LayoutAudit.Game(gc);
+                LayoutAudit.Game(gc);
             }
 
             var st = gc.State;
