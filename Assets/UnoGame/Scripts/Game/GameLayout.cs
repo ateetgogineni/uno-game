@@ -96,7 +96,7 @@ namespace UnoGame.Game
             stackText.rectTransform.Fill(0, 4, 0, 0);
 
             passButton = UIKit.Btn(tableCenter, "PassButton", UIKit.S("btn_yellow"), new Vector2(230, 100), "PASS", 44, Palette.Ink);
-            ((RectTransform)passButton.transform).At(Center, new Vector2(-180, -205), new Vector2(230, 100));
+            ((RectTransform)passButton.transform).At(Center, new Vector2(-188, -205), new Vector2(230, 100));
 
             // ---- log
             var logRt = UIKit.Node("Log", root).At(Center, new Vector2(0, -140), new Vector2(1000, 170));

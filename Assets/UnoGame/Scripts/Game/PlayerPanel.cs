@@ -23,6 +23,12 @@ namespace UnoGame.Game
         public RectTransform turnPill;
         public RectTransform bubble;
         public Image bubbleEmote;
+        // Compact seats at tables of 3+ players
+        public Image countBadge;
+        public RectTransform countRoot;
+        public RectTransform unoTag;
+        public CanvasGroup outGroup;
+        public TextMeshProUGUI outLabel;
 
         bool turn;
         int count = -1;
@@ -72,12 +78,46 @@ namespace UnoGame.Game
             timerFill.color = k > 0.33f ? Palette.Gold : Color.Lerp(Palette.Red, Palette.Gold, k / 0.33f);
         }
 
+        public bool IsOut { get; private set; }
+
         public void SetCount(int n, bool animate = true)
         {
             if (countText == null || n == count) return;
             count = n;
             countText.text = n.ToString();
-            if (animate) Tw.Punch(countText.transform, 0.3f, 0.3f);
+            if (animate) Tw.Punch(countRoot != null ? countRoot : countText.transform, 0.3f, 0.3f);
+            if (countBadge != null) countBadge.color = n == 1 && !IsOut ? Palette.Red : Palette.Ink;
+            if (unoTag != null)
+            {
+                bool show = n == 1 && !IsOut;
+                if (show && !unoTag.gameObject.activeSelf)
+                {
+                    unoTag.gameObject.SetActive(true);
+                    unoTag.localScale = Vector3.zero;
+                    Tw.Scale(unoTag, 1f, 0.35f, Ease.OutBackStrong);
+                }
+                else if (!show) unoTag.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>Knocked out (No Mercy 25 cards) or left: the seat greys out and stays empty.</summary>
+        public void SetOut(bool on, string label = "OUT")
+        {
+            if (IsOut == on) return;
+            IsOut = on;
+            if (outGroup == null) return;
+            outGroup.gameObject.SetActive(on);
+            if (outLabel != null) outLabel.text = label;
+            if (on)
+            {
+                SetTurn(false);
+                outGroup.alpha = 0f;
+                Tw.Alpha(outGroup, 1f, 0.3f);
+                Tw.Punch(avatar.transform, 0.15f, 0.4f);
+                if (unoTag != null) unoTag.gameObject.SetActive(false);
+                if (countRoot != null) countRoot.gameObject.SetActive(false);
+                avatar.color = new Color(0.55f, 0.55f, 0.6f, 1f);
+            }
         }
 
         public void SetName(PlayerInfo p)

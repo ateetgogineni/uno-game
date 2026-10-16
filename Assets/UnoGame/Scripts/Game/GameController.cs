@@ -10,7 +10,8 @@ using UnityEngine.UI;
 namespace UnoGame.Game
 {
     /// <summary>
-    /// Drives the table for every game mode. Messages from the session (online server or local bot game)
+    /// Drives the table for every game mode and table size (2 to 10 players; seats in GameTable.cs).
+    /// Messages from the session (online server or local bot game)
     /// are queued and played back one event at a time as animations; after each batch the authoritative
     /// state is applied (hand, counts, top card, turn, timer, Flip side). Taps on cards are animated straight
     /// away (optimistic) and then confirmed by the server's event.
@@ -94,12 +95,13 @@ namespace UnoGame.Game
         public bool PickerOpen => picker.IsOpen;
         public bool ResultOpen => result.IsOpen;
         public bool DareOpen => dare.IsOpen;
+        public bool TargetOpen => targets != null && targets.IsOpen;
 
         public bool MyTurn => state != null && !over && state.turn == seat;
 
         /// <summary>True when the local player may act right now.</summary>
         public bool CanAct => MyTurn && !busy && !awaiting && pendingPlay < 0 && session != null && session.Inbox.Count == 0 &&
-                              !picker.IsOpen && !dialog.IsOpen && !dare.IsOpen && !leaving;
+                              !picker.IsOpen && !dialog.IsOpen && !dare.IsOpen && !TargetOpen && !leaving;
 
         void Start()
         {
@@ -108,7 +110,7 @@ namespace UnoGame.Game
             {
                 // Scene opened on its own (editor): start a quick offline match.
                 App.I.Config.forceOffline = true;
-                App.I.Match.StartSearch(App.I.SelectedMode);
+                App.I.Match.StartSearch(App.I.SelectedMode, App.I.SelectedSize);
                 StartCoroutine(WaitForSession());
                 return;
             }
@@ -127,9 +129,12 @@ namespace UnoGame.Game
             seat = session.Seat;
             Table.Mode = session.Mode;
             Table.Side = 0;
-            mePanel.Setup(session.Me);
-            oppPanel.Setup(session.Opponent);
-            oppPanel.SetCount(0, false);
+            SetupSeats();
+            for (int s = 0; s < SeatCount; s++)
+            {
+                PanelOf(s).Setup(session.Players[s]);
+                if (s != seat) PanelOf(s).SetCount(0, false);
+            }
             log.Clear();
             stackBadge.gameObject.SetActive(false);
             passButton.gameObject.SetActive(false);
@@ -154,7 +159,10 @@ namespace UnoGame.Game
             session.EmoteReceived += OnEmote;
             session.ConnectionChanged += OnConnectionChanged;
             session.Lost += OnLost;
-            session.PlayersChanged += () => oppPanel.SetName(session.Opponent);
+            session.PlayersChanged += () =>
+            {
+                foreach (int s in Others) if (s < session.Size) PanelOf(s).SetName(session.Players[s]);
+            };
 
             session.Ready();
             StartCoroutine(Loop());
@@ -215,7 +223,7 @@ namespace UnoGame.Game
                         busy = false;
                         break;
                     case "sync":
-                        if (m.players != null && m.players.Length == 2) session.Players = m.players;
+                        if (m.players != null && m.players.Length == session.Size) session.Players = m.players;
                         Rebuild(m.st);
                         ApplyState(m.st, m.receivedAt);
                         break;
@@ -260,7 +268,7 @@ namespace UnoGame.Game
         IEnumerator PlayEvents(Ev[] events)
         {
             int[] myDeal = null;
-            int oppDeal = 0;
+            var dealt = new int[SeatCount];
             for (int i = 0; i < events.Length; i++)
             {
                 var ev = events[i];
@@ -268,9 +276,9 @@ namespace UnoGame.Game
                 {
                     case "deal":
                         if (ev.p == seat) myDeal = ev.cards;
-                        else oppDeal = ev.n;
+                        else if (ev.p >= 0 && ev.p < dealt.Length) dealt[ev.p] = ev.n;
                         bool lastDeal = i + 1 >= events.Length || events[i + 1].k != "deal";
-                        if (lastDeal) yield return DealRoutine(myDeal ?? new int[0], oppDeal);
+                        if (lastDeal) yield return DealRoutine(myDeal ?? new int[0], dealt);
                         break;
                     case "start": yield return StartCardRoutine(ev.card, ev.color); break;
                     case "turn": ShowTurn(ev.p); break;
@@ -278,12 +286,18 @@ namespace UnoGame.Game
                     case "uno": yield return UnoRoutine(ev.p); break;
                     case "unoPen": yield return PenaltyRoutine(ev); break;
                     case "reverse": yield return ReverseRoutine(ev.dir); break;
-                    case "skip": yield return SkipRoutine(ev.p, Mathf.Max(1, ev.n)); break;
+                    case "skip":
+                        // Skip Everyone: one skip per player, shown together
+                        bool moreSkips = i + 1 < events.Length && events[i + 1].k == "skip";
+                        yield return SkipRoutine(ev.p, Mathf.Max(1, ev.n), !moreSkips);
+                        break;
                     case "stack": ShowStack(ev.n, true); break;
                     case "draw": yield return DrawRoutine(ev); break;
                     case "reshuffle": yield return ReshuffleRoutine(); break;
                     case "flip": yield return FlipRoutine(ev.n, ev.card, ev.color); break;
-                    case "swap": yield return SwapRoutine(ev.p); break;
+                    case "swap": yield return SwapRoutine(ev.p, ev.n); break;
+                    case "rotate": yield return RotateRoutine(ev.dir); break;
+                    case "out": yield return OutRoutine(ev); break;
                     case "discardAll": yield return DiscardAllRoutine(ev); break;
                     case "launch": yield return LaunchRoutine(ev); break;
                     case "roulettePending":
@@ -310,9 +324,18 @@ namespace UnoGame.Game
         // ---------------------------------------------------------------- helpers
 
         string NameOf(int p) => p == seat ? "You" : session.Players[p].name;
-        PlayerPanel PanelOf(int p) => p == seat ? mePanel : oppPanel;
         Vector3 DeckWorld => drawPile.position;
-        HandView HandOf(int p) => p == seat ? myHand : oppHand;
+
+        /// <summary>A point next to a player's avatar, on the side facing the table.</summary>
+        Vector3 TowardTable(int p, float dist)
+        {
+            var a = PanelOf(p).Anchor.position;
+            if (p == seat) return a + new Vector3(0, dist, 0) * CanvasScale;
+            if (!multi) return a + new Vector3(0, -dist, 0) * CanvasScale;
+            var dir = tableCenter.position - a;
+            dir.z = 0f;
+            return a + dir.normalized * dist * CanvasScale;
+        }
 
         CardView SpawnAtDeck(HandView hand, int id)
         {
@@ -343,6 +366,7 @@ namespace UnoGame.Game
 
         void SetArrows(int dir, bool animate)
         {
+            UpdateChevrons(dir, animate);
             float sx = dir >= 0 ? 1f : -1f;
             foreach (var a in new[] { arrowA, arrowB })
             {
@@ -368,36 +392,47 @@ namespace UnoGame.Game
 
         void ShowTurn(int p)
         {
-            mePanel.SetTurn(!over && p == seat);
-            oppPanel.SetTurn(!over && p != seat);
+            for (int s = 0; s < SeatCount; s++) PanelOf(s).SetTurn(!over && p == s && !PanelOf(s).IsOut);
         }
 
         // ---------------------------------------------------------------- event animations
 
-        IEnumerator DealRoutine(int[] mine, int oppCount)
+        IEnumerator DealRoutine(int[] mine, int[] counts)
         {
             App.Play(Sound.Shuffle);
-            log.Push("<color=#FFD447>" + ModeInfo.Get(Table.Mode).Title + "</color>");
+            string title = ModeInfo.Get(Table.Mode).Title;
+            log.Push("<color=#FFD447>" + title + "</color>" + (multi ? "  •  " + SeatCount + " players" : ""));
             yield return Tw.Wait(0.25f);
-            int rounds = Mathf.Max(mine.Length, oppCount);
+            int n = SeatCount;
+            int rounds = mine.Length;
+            foreach (int c in counts) rounds = Mathf.Max(rounds, c);
+            // one card each per round, starting on your left; bigger tables deal a little faster per card
+            float perCard = (0.11f + 0.035f * (n - 2)) / n;
             for (int r = 0; r < rounds; r++)
             {
-                if (r < mine.Length)
+                for (int k = 1; k <= n; k++)
                 {
-                    var cv = SpawnAtDeck(myHand, mine[r]);
-                    myHand.Insert(cv);
-                    myHand.Layout(0.32f);
-                    cv.Flip(true, mine[r], 0.24f, 0.1f);
-                    App.Play(Sound.Deal, 0.8f, 1f + r * 0.02f);
+                    int s = (seat + k) % n;
+                    if (s == seat)
+                    {
+                        if (r >= mine.Length) continue;
+                        var cv = SpawnAtDeck(myHand, mine[r]);
+                        myHand.Insert(cv);
+                        myHand.Layout(0.32f);
+                        cv.Flip(true, mine[r], 0.24f, 0.1f);
+                        App.Play(Sound.Deal, 0.8f, 1f + r * 0.02f);
+                    }
+                    else
+                    {
+                        if (r >= counts[s]) continue;
+                        var hand = HandOf(s);
+                        var cv = SpawnAtDeck(hand, -1);
+                        hand.Insert(cv);
+                        hand.Layout(0.32f);
+                        PanelOf(s).SetCount(hand.Cards.Count);
+                    }
+                    yield return Tw.Wait(perCard);
                 }
-                if (r < oppCount)
-                {
-                    var cv = SpawnAtDeck(oppHand, -1);
-                    oppHand.Insert(cv);
-                    oppHand.Layout(0.32f);
-                    oppPanel.SetCount(oppHand.Cards.Count);
-                }
-                yield return Tw.Wait(0.11f);
             }
             yield return Tw.Wait(0.3f);
         }
@@ -469,9 +504,10 @@ namespace UnoGame.Game
             }
             else
             {
-                var cv = oppHand.TakeAny() ?? SpawnAtDeck(oppHand, -1);
-                oppHand.Layout();
-                oppPanel.SetCount(oppHand.Cards.Count);
+                var hand = HandOf(ev.p);
+                var cv = hand.TakeAny() ?? SpawnAtDeck(hand, -1);
+                hand.Layout();
+                PanelOf(ev.p).SetCount(hand.Cards.Count);
                 yield return FlyToDiscard(cv, ev.card);
             }
             SetColor(ev.color, true);
@@ -490,8 +526,8 @@ namespace UnoGame.Game
         IEnumerator UnoRoutine(int p)
         {
             App.Play(Sound.Uno);
-            var at = PanelOf(p).Anchor.position + new Vector3(0, p == seat ? 160f : -160f, 0) * CanvasScale;
-            Fx.PopSprite(fxLayer, UIKit.S("uno_burst"), at, new Vector2(390, 240), Color.white, 0.8f);
+            var at = TowardTable(p, multi && p != seat ? 130f : 160f);
+            Fx.PopSprite(fxLayer, UIKit.S("uno_burst"), at, multi && p != seat ? new Vector2(290, 178) : new Vector2(390, 240), Color.white, 0.8f);
             log.Push(NameOf(p) + " called <color=#FFD447>UNO!</color>");
             yield return Tw.Wait(0.5f);
         }
@@ -516,13 +552,14 @@ namespace UnoGame.Game
             yield return Tw.Wait(0.45f);
         }
 
-        IEnumerator SkipRoutine(int p, int times)
+        IEnumerator SkipRoutine(int p, int times, bool wait = true)
         {
             for (int i = 0; i < times; i++)
             {
                 App.Play(Sound.Whoosh, 0.8f, 1.2f);
                 Fx.PopSprite(fxLayer, UIKit.S("fx_skip"), PanelOf(p).Anchor.position + new Vector3(i * 60f, 0, 0) * CanvasScale, new Vector2(200, 200), Palette.Red, 0.5f);
-                yield return Tw.Wait(0.35f);
+                if (wait || i + 1 < times) yield return Tw.Wait(0.35f);
+                else yield return Tw.Wait(0.06f);
             }
         }
 
@@ -557,10 +594,11 @@ namespace UnoGame.Game
                 }
                 else
                 {
-                    var cv = SpawnAtDeck(oppHand, -1);
-                    oppHand.Insert(cv);
-                    oppHand.Layout(0.34f);
-                    oppPanel.SetCount(oppHand.Cards.Count);
+                    var hand = HandOf(p);
+                    var cv = SpawnAtDeck(hand, -1);
+                    hand.Insert(cv);
+                    hand.Layout(0.34f);
+                    PanelOf(p).SetCount(hand.Cards.Count);
                 }
                 App.Play(Sound.Draw, 0.8f);
                 yield return Tw.Wait(gap);
@@ -596,7 +634,7 @@ namespace UnoGame.Game
             Table.Side = side;
             if (tableBg != null) Tw.Color(tableBg, side == 1 ? DarkTable : Color.white, 0.6f);
             foreach (var cv in myHand.Cards) cv.Flip(true, cv.Id, 0.45f);
-            foreach (var cv in oppHand.Cards) cv.Flip(false, -1, 0.45f);
+            foreach (int s in Others) foreach (var cv in HandOf(s).Cards) cv.Flip(false, -1, 0.45f);
             Tw.Punch(drawPile, 0.12f, 0.5f);
             // the discard pile turns over too: its bottom card comes up on top
             foreach (var cv in discardViews) if (cv != null) Destroy(cv.gameObject);
@@ -619,31 +657,89 @@ namespace UnoGame.Game
             yield return Tw.Wait(0.3f);
         }
 
-        // Hands change owners (Forced Swap, Trade Hands, No Mercy 7/0).
-        IEnumerator SwapRoutine(int p)
+        // Two hands change owners (Forced Swap, Trade Hands, No Mercy 7, and 0 with two players).
+        IEnumerator SwapRoutine(int a, int b)
         {
             App.Play(Sound.Whoosh);
             Fx.PopText(fxLayer, "SWAP!", tableCenter.position, Palette.Gold, 140f, 0.4f);
-            var mine = new List<CardView>(myHand.Cards);
-            var theirs = new List<CardView>(oppHand.Cards);
-            myHand.Cards.Clear();
-            oppHand.Cards.Clear();
-            Vector3 toOpp = oppHand.transform.position, toMe = myHand.transform.position;
-            foreach (var cv in mine)
-            {
-                cv.transform.SetParent(fxLayer, true);
-                Tw.WorldPos(cv.transform, toOpp, 0.5f, Ease.InOutCubic);
-                cv.Flip(false, -1, 0.3f);
-                Destroy(cv.gameObject, 0.55f);
-            }
-            foreach (var cv in theirs)
-            {
-                cv.transform.SetParent(fxLayer, true);
-                Tw.WorldPos(cv.transform, toMe, 0.5f, Ease.InOutCubic);
-                Destroy(cv.gameObject, 0.55f);
-            }
-            log.Push(NameOf(p) + " swapped hands!");
+            if (b < 0 || b >= SeatCount || b == a) b = (a + 1) % SeatCount;
+            FlyHand(a, b);
+            FlyHand(b, a);
+            if (!multi) log.Push(NameOf(a) + " swapped hands!");
+            else log.Push(NameOf(a) + " swapped hands with " + (b == seat ? "you" : NameOf(b)) + "!");
             yield return Tw.Wait(0.6f);
+        }
+
+        // No Mercy 0 at a table of 3+: every hand moves one seat on in the direction of play.
+        IEnumerator RotateRoutine(int dir)
+        {
+            App.Play(Sound.Whoosh);
+            App.Play(Sound.Shuffle, 0.6f);
+            Fx.PopText(fxLayer, "PASS IT ON!", tableCenter.position, Palette.Gold, 120f, 0.4f);
+            for (int s = 0; s < SeatCount; s++) if (!IsOutSeat(s)) FlyHand(s, NextSeat(s, dir >= 0 ? 1 : -1));
+            log.Push("<color=#FFD447>Zero!</color> Every hand moves on one seat");
+            yield return Tw.Wait(0.7f);
+        }
+
+        // A player is out of a 3+ game: knocked out by the 25-card Mercy rule, or left.
+        IEnumerator OutRoutine(Ev ev)
+        {
+            var hand = HandOf(ev.p);
+            var cards = new List<CardView>(hand.Cards);
+            hand.Cards.Clear();
+            for (int i = 0; i < cards.Count; i++)
+            {
+                var cv = cards[i];
+                cv.transform.SetParent(fxLayer, true);
+                Tw.WorldPos(cv.transform, DeckWorld, 0.45f, Ease.InOutCubic, i * 0.015f);
+                if (ev.p == seat) cv.Flip(false, -1, 0.25f);
+                Destroy(cv.gameObject, 0.6f + i * 0.015f);
+            }
+            if (ev.p != seat)
+            {
+                PanelOf(ev.p).SetCount(0, false);
+                PanelOf(ev.p).SetOut(true, ev.reason == "mercy" ? "OUT" : "LEFT");
+            }
+            string who = NameOf(ev.p);
+            if (ev.reason == "mercy") log.Push("<color=#FF5C5C>" + who + (ev.p == seat ? " are" : " is") + " out!</color> Cards go back in the pile");
+            else if (ev.reason == "idle") log.Push(who + (ev.p == seat ? " were" : " was") + " inactive and left the table");
+            else log.Push(who + " left the game");
+            if (ev.p != seat && ev.reason != "mercy") toast.Show(who + (ev.reason == "idle" ? " was inactive" : " left") + ": the game goes on", 2f);
+            App.Play(Sound.Error, 0.7f);
+            yield return Tw.Wait(0.6f);
+            if (ev.p == seat) yield return KnockedOutRoutine(ev.reason);
+        }
+
+        // You are out of a game that goes on without you.
+        IEnumerator KnockedOutRoutine(string reason)
+        {
+            over = true;
+            foreach (var c in myHand.Cards) if (c != null) Destroy(c.gameObject);
+            myHand.Cards.Clear();
+            ShowTurn(-1);
+            unoButton.gameObject.SetActive(false);
+            passButton.gameObject.SetActive(false);
+            SetGlowAlpha(deckGlow, 0f);
+            App.I.Profile.RecordGame(false, 0);
+            Debug.Log("[Game] over: out (" + Table.Mode + ", " + reason + ", " + SeatCount + " players)");
+            App.Play(Sound.Lose);
+            yield return banner.Show("YOU'RE OUT", new Color(0.85f, 0.88f, 0.9f), 1.1f, false);
+            string note = reason == "mercy" ? "You hit 25 cards: Mercy rule" : reason == "idle" ? "You were inactive" : "You left the game";
+            result.Show(false, session.Me, session.Players[Leader()], 0, reason, App.I.Profile, note);
+            App.I.Match.EndSession();
+        }
+
+        /// <summary>The other player still in the game with the fewest cards.</summary>
+        int Leader()
+        {
+            int best = (seat + 1) % SeatCount, bestCount = int.MaxValue;
+            foreach (int s in Others)
+            {
+                if (IsOutSeat(s)) continue;
+                int c = state != null && state.counts != null && s < state.counts.Length ? state.counts[s] : HandOf(s).Cards.Count;
+                if (c < bestCount) { best = s; bestCount = c; }
+            }
+            return best;
         }
 
         IEnumerator DiscardAllRoutine(Ev ev)
@@ -661,14 +757,15 @@ namespace UnoGame.Game
                 }
                 else
                 {
-                    cv = oppHand.TakeAny() ?? SpawnAtDeck(oppHand, -1);
-                    oppPanel.SetCount(oppHand.Cards.Count);
+                    var hand = HandOf(ev.p);
+                    cv = hand.TakeAny() ?? SpawnAtDeck(hand, -1);
+                    PanelOf(ev.p).SetCount(hand.Cards.Count);
                 }
                 StartCoroutine(FlyToDiscard(cv, id, true));
                 yield return Tw.Wait(0.12f);
             }
             myHand.Layout();
-            oppHand.Layout();
+            if (!mine) HandOf(ev.p).Layout();
             log.Push(NameOf(ev.p) + " discarded " + ev.cards.Length + " more card" + (ev.cards.Length == 1 ? "" : "s"));
             yield return Tw.Wait(0.4f);
         }
@@ -708,7 +805,7 @@ namespace UnoGame.Game
             bool ok = ev.forced == 0;
             if (ev.p != seat)
             {
-                Fx.PopText(fxLayer, ok ? "DARE DONE!" : "NO DARE", oppPanel.Anchor.position, ok ? Palette.Online : new Color(1f, 0.45f, 0.45f), 80f, 0.4f);
+                Fx.PopText(fxLayer, ok ? "DARE DONE!" : "NO DARE", PanelOf(ev.p).Anchor.position, ok ? Palette.Online : new Color(1f, 0.45f, 0.45f), 80f, 0.4f);
                 App.Play(ok ? Sound.Found : Sound.Error, 0.7f);
             }
             log.Push(NameOf(ev.p) + (ok ? " completed the dare!" : " took the cards instead"));
@@ -719,22 +816,27 @@ namespace UnoGame.Game
         {
             over = true;
             bool won = ev.p == seat;
-            mePanel.SetTurn(false);
-            oppPanel.SetTurn(false);
+            ShowTurn(-1);
             unoButton.gameObject.SetActive(false);
             passButton.gameObject.SetActive(false);
             SetGlowAlpha(deckGlow, 0f);
             foreach (var c in myHand.Cards) { c.SetDim(false); c.Lifted = false; }
             myHand.Layout();
-            if (ev.reason == "left") toast.Show(won ? session.Opponent.name + " left the game" : "You left the game");
-            else if (ev.reason == "idle") toast.Show(won ? session.Opponent.name + " was inactive" : "You were inactive");
+            string other = multi ? "The last player" : session.Opponent.name;
+            if (ev.reason == "left") toast.Show(won ? other + " left the game" : "You left the game");
+            else if (ev.reason == "idle") toast.Show(won ? other + " was inactive" : "You were inactive");
             else if (ev.reason == "stalemate" || ev.reason == "limit") toast.Show("Nobody can play: fewest cards wins");
             App.I.Profile.RecordGame(won, ev.pts);
             Debug.Log("[Game] over: " + (won ? "won" : "lost") + " (" + Table.Mode + ", " + ev.reason + ", " + ev.pts + " pts)");
             yield return Tw.Wait(0.4f);
             App.Play(won ? Sound.Win : Sound.Lose);
             yield return banner.Show(won ? "YOU WON!" : "YOU LOST", won ? Palette.Gold : new Color(0.85f, 0.88f, 0.9f), 1.1f, won);
-            result.Show(won, session.Me, session.Opponent, ev.pts, ev.reason, App.I.Profile);
+            // At a big table the result shows you against the winner (or, if you won, the runner-up).
+            var shown = session.Players[won ? Leader() : ev.p];
+            string note = !multi ? null : won
+                ? "+" + ev.pts + " points  •  beat " + (SeatCount - 1) + " players"
+                : shown.name + " won  •  scored " + ev.pts;
+            result.Show(won, session.Me, shown, ev.pts, ev.reason, App.I.Profile, note);
             App.I.Match.EndSession();
         }
 
@@ -757,7 +859,8 @@ namespace UnoGame.Game
             }
 
             ReconcileHand(st.hand);
-            ReconcileOpponent(st.counts != null && st.counts.Length > 1 ? st.counts[1 - seat] : oppHand.Cards.Count);
+            foreach (int s in Others)
+                ReconcileSeat(s, st.counts != null && s < st.counts.Length ? st.counts[s] : HandOf(s).Cards.Count, IsOutSeat(s));
             ShowFlipFaces(st);
             if (discardTop == null || discardTop.Id != st.top) SetTop(st.top);
             SetColor(st.color, false);
@@ -766,8 +869,12 @@ namespace UnoGame.Game
 
             if (Table.Mode == "nomercy")
             {
-                int oc = st.counts != null && st.counts.Length > 1 ? st.counts[1 - seat] : 0;
-                if (oppPanel.countText != null) oppPanel.countText.color = oc >= 20 ? new Color(1f, 0.4f, 0.4f) : Color.white;
+                foreach (int s in Others)
+                {
+                    int oc = st.counts != null && s < st.counts.Length ? st.counts[s] : 0;
+                    var cp = PanelOf(s);
+                    if (cp.countText != null) cp.countText.color = oc >= 20 ? new Color(1f, 0.4f, 0.4f) : Color.white;
+                }
                 if (!mercyWarned && st.hand.Length >= 20)
                 {
                     mercyWarned = true;
@@ -793,7 +900,7 @@ namespace UnoGame.Game
             HandlePending();
         }
 
-        // UNO Flip: you can see the other side of the opponent's cards and of the draw pile.
+        // UNO Flip: you can see the other side of every opponent's cards and of the draw pile.
         void ShowFlipFaces(St st)
         {
             if (Table.Mode != "flip")
@@ -804,8 +911,16 @@ namespace UnoGame.Game
             int other = 1 - st.side;
             deckTop.sprite = st.pileFace >= 0 ? ArtLibrary.I.FaceSprite(Face.FromCode(st.pileFace), other) : ArtLibrary.I.cardBack;
             if (st.oppFaces == null) return;
-            for (int i = 0; i < oppHand.Cards.Count && i < st.oppFaces.Length; i++)
-                oppHand.Cards[i].ShowFace(Face.FromCode(st.oppFaces[i]), other);
+            // the faces come seat by seat, starting with the player after you
+            int idx = 0;
+            foreach (int s in Others)
+            {
+                int count = st.counts != null && s < st.counts.Length ? st.counts[s] : 0;
+                var cards = HandOf(s).Cards;
+                for (int i = 0; i < count && i < cards.Count && idx + i < st.oppFaces.Length; i++)
+                    cards[i].ShowFace(Face.FromCode(st.oppFaces[idx + i]), other);
+                idx += count;
+            }
         }
 
         void HandlePending()
@@ -866,29 +981,31 @@ namespace UnoGame.Game
             if (changed) myHand.Layout(0.25f);
         }
 
-        void ReconcileOpponent(int n)
+        void ReconcileSeat(int s, int n, bool isOut)
         {
+            var hand = HandOf(s);
             bool changed = false;
-            while (oppHand.Cards.Count > n)
+            while (hand.Cards.Count > n)
             {
-                var cv = oppHand.TakeAny();
+                var cv = hand.TakeAny();
                 Destroy(cv.gameObject);
                 changed = true;
             }
-            while (oppHand.Cards.Count < n)
+            while (hand.Cards.Count < n)
             {
-                var cv = oppHand.Spawn(-1, false);
-                oppHand.Insert(cv);
+                var cv = hand.Spawn(-1, false);
+                hand.Insert(cv);
                 changed = true;
             }
-            if (changed) oppHand.Layout(0.25f);
-            oppPanel.SetCount(n, changed);
+            if (changed) hand.Layout(0.25f);
+            PanelOf(s).SetCount(n, changed);
+            if (isOut && !PanelOf(s).IsOut) PanelOf(s).SetOut(true);
         }
 
         void Rebuild(St st)
         {
             myHand.Clear();
-            oppHand.Clear();
+            foreach (int s in Others) HandOf(s).Clear();
             foreach (var cv in discardViews) if (cv != null) Destroy(cv.gameObject);
             discardViews.Clear();
             discardTop = null;
@@ -898,9 +1015,15 @@ namespace UnoGame.Game
             if (tableBg != null) tableBg.color = st.side == 1 ? DarkTable : Color.white;
             foreach (int id in st.hand) myHand.Insert(myHand.Spawn(id, true));
             myHand.Layout(0f);
-            int oc = st.counts != null && st.counts.Length > 1 ? st.counts[1 - st.you] : 0;
-            for (int i = 0; i < oc; i++) oppHand.Insert(oppHand.Spawn(-1, false));
-            oppHand.Layout(0f);
+            foreach (int s in Others)
+            {
+                var hand = HandOf(s);
+                int oc = st.counts != null && s < st.counts.Length ? st.counts[s] : 0;
+                for (int i = 0; i < oc; i++) hand.Insert(hand.Spawn(-1, false));
+                hand.Layout(0f);
+                PanelOf(s).SetCount(oc, false);
+                if (st.@out != null && s < st.@out.Length && st.@out[s] == 1) PanelOf(s).SetOut(true);
+            }
             SetTop(st.top);
             UpdateModeChip(false);
         }
@@ -963,14 +1086,14 @@ namespace UnoGame.Game
                 picker.Show(color =>
                 {
                     awaiting = false;
-                    if (color >= 0) CommitPlay(cv, color);
+                    if (color >= 0) ChooseTargetThen(cv, color);
                 }, Table.Side);
                 return;
             }
-            CommitPlay(cv, -1);
+            ChooseTargetThen(cv, -1);
         }
 
-        void CommitPlay(CardView cv, int color)
+        void CommitPlay(CardView cv, int color, int target = -1)
         {
             if (cv == null || !CanAct) return;
             pendingPlay = cv.Id;
@@ -986,7 +1109,7 @@ namespace UnoGame.Game
             StartCoroutine(FlyToDiscard(cv, cv.Id));
             if (color >= 0) SetColor(color, true);
             mePanel.SetTurn(false);
-            session.Play(cv.Id, color, uno);
+            session.Play(cv.Id, color, uno, target);
         }
 
         void OnDeckClicked()
@@ -1038,9 +1161,9 @@ namespace UnoGame.Game
 
         void OnEmote(int fromSeat, int e)
         {
-            if (fromSeat == seat) return;
+            if (fromSeat == seat || fromSeat < 0 || fromSeat >= SeatCount) return;
             App.Play(Sound.Pop);
-            oppPanel.ShowEmote(e);
+            PanelOf(fromSeat).ShowEmote(e);
         }
 
         void OnConnectionChanged(bool lost)
@@ -1089,11 +1212,13 @@ namespace UnoGame.Game
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 if (picker.IsOpen) picker.Choose(-1);
+                else if (TargetOpen) targets.Choose(-1);
                 else if (emotePanel.IsOpen) emotePanel.Hide();
                 else if (menu.IsOpen) menu.Hide();
                 else if (dialog.IsOpen) dialog.Close(false);
                 else if (!dare.IsOpen) AskLeave();
             }
+            if (multi && ((RectTransform)transform).rect.size != laidOutFor) LayoutSeats();
             if (state == null || over) return;
             float left = deadline - Time.unscaledTime;
             float k = left / turnLen;
@@ -1107,7 +1232,7 @@ namespace UnoGame.Game
                     App.Play(Sound.Tick, 0.7f);
                 }
             }
-            else oppPanel.SetTimer(k);
+            else PanelOf(state.turn).SetTimer(k);
         }
 
         // ---------------------------------------------------------------- autopilot hooks
@@ -1124,5 +1249,6 @@ namespace UnoGame.Game
         public void AutoPickColor(int c) => picker.Choose(c);
         public void AutoEmote(int e) => OnEmotePicked(e);
         public void AutoDare(bool doDare, bool succeed) => dare.AutoAnswer(doDare, succeed);
+        public void AutoPickTarget() { if (TargetOpen) targets.Choose(targets.Best); }
     }
 }

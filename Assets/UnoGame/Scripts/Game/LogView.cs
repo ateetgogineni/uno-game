@@ -16,6 +16,8 @@ namespace UnoGame.Game
         readonly string[] texts = { "", "", "" };
         static readonly float[] Alphas = { 0.32f, 0.62f, 1f };
         static readonly float[] Sizes = { 34f, 37f, 42f };
+        /// <summary>Font scale (smaller in landscape, where the log sits between the table and your hand).</summary>
+        public float sizeScale = 1f;
 
         public void Clear()
         {
@@ -30,8 +32,8 @@ namespace UnoGame.Game
             for (int i = 0; i < 3; i++)
             {
                 lines[i].text = texts[i];
-                lines[i].fontSizeMax = Sizes[i];
-                lines[i].fontSize = Sizes[i];
+                lines[i].fontSizeMax = Sizes[i] * sizeScale;
+                lines[i].fontSize = Sizes[i] * sizeScale;
                 var c = lines[i].color; c.a = Alphas[i]; lines[i].color = c;
             }
             var newest = lines[2];

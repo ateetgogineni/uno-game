@@ -26,9 +26,13 @@ namespace UnoGame.Game
         public Button home;
         public RectTransform confettiLayer;
 
+        /// <summary>Content scale (landscape tables shrink the panel to fit the 1080 high screen).</summary>
+        public float baseScale = 1f;
+
         public bool IsOpen => gameObject.activeSelf;
 
-        public void Show(bool won, PlayerInfo me, PlayerInfo opp, int points, string reason, Profile profile)
+        /// <param name="note">Replaces the points line (bigger tables, knocked out).</param>
+        public void Show(bool won, PlayerInfo me, PlayerInfo opp, int points, string reason, Profile profile, string note = null)
         {
             gameObject.SetActive(true);
             group.alpha = 0f;
@@ -45,11 +49,12 @@ namespace UnoGame.Game
             string why = reason == "left" ? (won ? "Opponent left the game" : "You left the game")
                 : reason == "idle" ? (won ? "Opponent was inactive" : "You were inactive") : null;
             pointsText.text = won ? $"+{points} points" : $"{opp.name} scored {points}";
-            if (why != null) pointsText.text = why + "\n<size=80%>" + pointsText.text + "</size>";
+            if (note != null) pointsText.text = note;
+            else if (why != null) pointsText.text = why + "\n<size=80%>" + pointsText.text + "</size>";
             statsText.text = $"Wins  <color=#FFC21A>{profile.wins}</color>     Games  <color=#FFC21A>{profile.games}</color>     Streak  <color=#FFC21A>{profile.streak}</color>";
 
-            content.localScale = Vector3.one * 0.6f;
-            Tw.Scale(content, 1f, 0.5f, Ease.OutBack);
+            content.localScale = Vector3.one * 0.6f * baseScale;
+            Tw.Scale(content, baseScale, 0.5f, Ease.OutBack);
             ribbon.rectTransform.localScale = Vector3.one * 1.6f;
             Tw.Scale(ribbon.rectTransform, 1f, 0.45f, Ease.OutBackStrong, 0.15f);
             playAgain.transform.localScale = Vector3.zero;

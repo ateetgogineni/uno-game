@@ -6,13 +6,15 @@ using UnityEngine;
 namespace UnoGame.Game
 {
     /// <summary>
-    /// A fanned row of cards. The local hand is sorted by colour/value and shown face up; the opponent's
-    /// hand is drawn upside down at the top of the screen.
+    /// A fanned row of cards. The local hand is sorted by colour/value and shown face up; the 1v1 opponent's
+    /// hand is drawn upside down at the top of the screen. At bigger tables each opponent has a small upright
+    /// fan (fanUp) peeking over their avatar.
     /// </summary>
     public sealed class HandView : MonoBehaviour
     {
         public CardView prefab;
         public bool opponent;
+        public bool fanUp;
         public float cardScale = 1f;
         public float maxWidth = 1000f;
         public float spacingMax = 140f;
@@ -94,7 +96,14 @@ namespace UnoGame.Game
             float off = i - mid;
             float step = n > 1 ? Mathf.Min(3.2f, 26f / n) : 0f;
             float drop = n > 1 ? curve * (off * off) / Mathf.Max(1f, mid * mid) : 0f;
-            if (opponent)
+            if (fanUp)
+            {
+                // a small hand held up behind the avatar, spread like a real fan
+                float fan = n > 1 ? Mathf.Min(12f, 48f / n) : 0f;
+                pos = new Vector2(off * spacing, -drop);
+                rot = -off * fan;
+            }
+            else if (opponent)
             {
                 pos = new Vector2(-off * spacing, drop);
                 rot = 180f + off * step;
