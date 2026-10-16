@@ -12,7 +12,7 @@ namespace UnoGame.Core
         public static readonly string[] LightNames = { "Red", "Yellow", "Green", "Blue" };
         public static readonly string[] DarkNames = { "Pink", "Teal", "Orange", "Purple" };
         // Text colours for card names on the dark table (slightly lighter than the card art).
-        static readonly string[] LightHex = { "#FF5C5C", "#FFD447", "#5ED46E", "#4FA9FF" };
+        static readonly string[] LightHex = { "#FF6B6B", "#FFD447", "#9DFFAE", "#6FBAFF" };
         static readonly string[] DarkHex = { "#FF6FC4", "#3FE0DD", "#FF9A4D", "#B98AFF" };
 
         public static string ColorName(int c, int side) => c >= 0 && c < 4 ? (side == 1 ? DarkNames[c] : LightNames[c]) : "Wild";

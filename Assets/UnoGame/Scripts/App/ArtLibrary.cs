@@ -16,6 +16,7 @@ namespace UnoGame
         public Sprite[] darkBalls = new Sprite[4];
         public Sprite logo;
         public Sprite bgTable;
+        public Sprite bgTableLand;   // landscape table (5+ players)
         public Sprite bgHome;
         public List<Sprite> ui = new List<Sprite>();
 

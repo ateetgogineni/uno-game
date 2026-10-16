@@ -30,6 +30,7 @@ namespace UnoGame.EditorTools
             ImportAtlas("ui", TextureImporterFormat.ASTC_5x5);
             ImportSingle("logo", TextureImporterFormat.ASTC_5x5, 1024);
             ImportSingle("bg_table", TextureImporterFormat.ASTC_8x8, 2048);
+            ImportSingle("bg_table_land", TextureImporterFormat.ASTC_8x8, 2048);
             ImportSingle("bg_home", TextureImporterFormat.ASTC_8x8, 2048);
             BuildLibrary();
         }
@@ -124,6 +125,7 @@ namespace UnoGame.EditorTools
             lib.ui = ui.Values.OrderBy(s => s.name).ToList();
             lib.logo = AssetDatabase.LoadAssetAtPath<Sprite>(Dir + "logo.png");
             lib.bgTable = AssetDatabase.LoadAssetAtPath<Sprite>(Dir + "bg_table.png");
+            lib.bgTableLand = AssetDatabase.LoadAssetAtPath<Sprite>(Dir + "bg_table_land.png");
             lib.bgHome = AssetDatabase.LoadAssetAtPath<Sprite>(Dir + "bg_home.png");
             EditorUtility.SetDirty(lib);
             AssetDatabase.SaveAssets();

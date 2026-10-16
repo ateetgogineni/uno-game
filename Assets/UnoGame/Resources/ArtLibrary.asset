@@ -200,6 +200,7 @@ MonoBehaviour:
   - {fileID: 246470098, guid: c385691ac9666da45b4661c8279586b3, type: 3}
   logo: {fileID: 21300000, guid: f360237373a6b2a4c84eeddfb3a3d207, type: 3}
   bgTable: {fileID: 21300000, guid: 3c8227659cce52547b7a9341d6da47da, type: 3}
+  bgTableLand: {fileID: 21300000, guid: 444e187d55be4e74da5ec286f5f6546c, type: 3}
   bgHome: {fileID: 21300000, guid: f765b21caf6e37a439f96eea9b1c23a4, type: 3}
   ui:
   - {fileID: 719383897, guid: c385691ac9666da45b4661c8279586b3, type: 3}

@@ -724,16 +724,19 @@ function logo() {
   return svg(w, h, body, defs.join(''));
 }
 
+// kind: 'table' (portrait), 'table_land' (landscape, 5+ players) or 'home'.
 function background(kind) {
-  const w = 1080, h = 1920, defs = [];
+  const land = kind === 'table_land';
+  const w = land ? 1920 : 1080, h = land ? 1080 : 1920, defs = [];
   const g = id('g');
   let body = '';
-  if (kind === 'table') {
-    defs.push(`<radialGradient id="${g}" cx="0.5" cy="0.42" r="0.85"><stop offset="0" stop-color="#3A4C52"/><stop offset="0.6" stop-color="#28363A"/><stop offset="1" stop-color="#172023"/></radialGradient>`);
+  if (kind === 'table' || land) {
+    // green card-table felt: radial light, faint diamond weave, a ring round the play area (portrait)
+    defs.push(`<radialGradient id="${g}" cx="0.5" cy="${land ? 0.46 : 0.42}" r="0.85"><stop offset="0" stop-color="#2E9159"/><stop offset="0.6" stop-color="#1C6E43"/><stop offset="1" stop-color="#0B3B23"/></radialGradient>`);
     const pat = id('p');
-    defs.push(`<pattern id="${pat}" width="54" height="54" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="27" height="27" fill="#fff" opacity="0.018"/></pattern>`);
+    defs.push(`<pattern id="${pat}" width="54" height="54" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="27" height="27" fill="#fff" opacity="0.03"/></pattern>`);
     body += `<rect width="${w}" height="${h}" fill="url(#${g})"/><rect width="${w}" height="${h}" fill="url(#${pat})"/>`;
-    body += `<ellipse cx="540" cy="820" rx="470" ry="560" fill="none" stroke="#fff" stroke-opacity="0.035" stroke-width="6"/>`;
+    if (!land) body += `<ellipse cx="540" cy="820" rx="470" ry="560" fill="none" stroke="#fff" stroke-opacity="0.06" stroke-width="6"/>`;
   } else {
     defs.push(`<radialGradient id="${g}" cx="0.5" cy="0.4" r="0.9"><stop offset="0" stop-color="#5B3BC4"/><stop offset="0.55" stop-color="#2E1B6E"/><stop offset="1" stop-color="#140B33"/></radialGradient>`);
     body += `<rect width="${w}" height="${h}" fill="url(#${g})"/>`;
@@ -880,6 +883,7 @@ function main() {
   if (!only || only === 'big') {
     renderSingle('logo', logo());
     renderSingle('bg_table', background('table'));
+    renderSingle('bg_table_land', background('table_land'));
     renderSingle('bg_home', background('home'));
   }
 
