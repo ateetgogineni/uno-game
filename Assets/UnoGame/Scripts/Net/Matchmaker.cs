@@ -6,7 +6,8 @@ namespace UnoGame.Net
 {
     /// <summary>
     /// Owns the server connection and finds matches. Search flow:
-    ///   connect (if needed) -> "find" -> server pairs two players, or adds a bot after a few seconds.
+    ///   connect (if needed) -> "find" -> server seats the players waiting for the same mode and table
+    ///   size, and fills the empty seats with bots after a few seconds.
     ///   If the server cannot be reached (or does not answer in time) a local bot match is made instead,
     ///   so pressing Play always ends in a game.
     /// </summary>
@@ -77,11 +78,16 @@ namespace UnoGame.Net
         }
 
         public string SearchMode { get; private set; } = "classic";
+        /// <summary>Table size being searched for (2 to 10 players).</summary>
+        public int SearchSize { get; private set; } = 2;
 
-        public void StartSearch(string mode)
+        public const int MinPlayers = 2, MaxPlayers = 10;
+
+        public void StartSearch(string mode, int size = 2)
         {
             if (Current == Phase.Searching) return;
             SearchMode = Core.Decks.Normalize(mode);
+            SearchSize = Mathf.Clamp(size, MinPlayers, MaxPlayers);
             EndSession();
             Current = Phase.Searching;
             searchStart = Now;
@@ -102,8 +108,8 @@ namespace UnoGame.Net
         {
             SearchingOnline = true;
             onlineDeadline = Now + cfg.onlineMatchTimeoutSec;
-            net.Send(Wire.Find(profile.BotLevel, SearchMode));
-            Debug.Log("[Match] searching online for " + SearchMode + ", bot level " + profile.BotLevel);
+            net.Send(Wire.Find(profile.BotLevel, SearchMode, SearchSize));
+            Debug.Log("[Match] searching online for " + SearchMode + ", " + SearchSize + " players, bot level " + profile.BotLevel);
             StatusChanged?.Invoke();
         }
 
@@ -146,7 +152,9 @@ namespace UnoGame.Net
             SearchingOnline = false;
             localMatchAt = -1;
             onlineDeadline = -1;
-            Debug.Log("[Match] matched (" + (s.IsOnline ? "online" : "offline") + ") vs " + s.Opponent.name);
+            var others = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < s.Size; i++) if (i != s.Seat) others.Add(s.Players[i].name);
+            Debug.Log("[Match] matched (" + (s.IsOnline ? "online" : "offline") + ", " + s.Size + " players) vs " + string.Join(", ", others));
             Matched?.Invoke(s);
             StatusChanged?.Invoke();
         }
@@ -243,12 +251,21 @@ namespace UnoGame.Net
 
         LocalSession MakeLocal()
         {
-            var me = new PlayerInfo { name = profile.name, avatar = profile.avatar };
-            int avatar;
-            do { avatar = UnityEngine.Random.Range(0, Avatars.Count); } while (avatar == profile.avatar);
-            var bot = new PlayerInfo { name = BotNames.Pick(), avatar = avatar };
-            Debug.Log("[Match] offline " + SearchMode + ", bot level " + profile.BotLevel);
-            return new LocalSession(cfg, me, bot, profile.BotLevel, SearchMode);
+            var players = new PlayerInfo[SearchSize];
+            players[0] = new PlayerInfo { name = profile.name, avatar = profile.avatar };
+            var avatars = new System.Collections.Generic.List<int> { profile.avatar };
+            var names = new System.Collections.Generic.List<string> { profile.name };
+            for (int i = 1; i < players.Length; i++)
+            {
+                int avatar;
+                do { avatar = UnityEngine.Random.Range(0, Avatars.Count); } while (avatars.Contains(avatar) && avatars.Count < Avatars.Count);
+                avatars.Add(avatar);
+                string name = BotNames.Pick(names);
+                names.Add(name);
+                players[i] = new PlayerInfo { name = name, avatar = avatar };
+            }
+            Debug.Log("[Match] offline " + SearchMode + ", " + SearchSize + " players, bot level " + profile.BotLevel);
+            return new LocalSession(cfg, players, profile.BotLevel, SearchMode);
         }
 
         void OnApplicationPause(bool paused)
@@ -280,5 +297,13 @@ namespace UnoGame.Net
         };
 
         public static string Pick() => Names[UnityEngine.Random.Range(0, Names.Length)];
+
+        /// <summary>A name nobody at the table has yet.</summary>
+        public static string Pick(System.Collections.Generic.ICollection<string> taken)
+        {
+            var free = new System.Collections.Generic.List<string>();
+            foreach (var n in Names) if (!taken.Contains(n)) free.Add(n);
+            return free.Count > 0 ? free[UnityEngine.Random.Range(0, free.Count)] : Pick();
+        }
     }
 }

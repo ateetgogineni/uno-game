@@ -25,16 +25,20 @@ namespace UnoGame.Net
         public event Action<bool> ConnectionChanged;
         /// <summary>Fired when an online match cannot be recovered.</summary>
         public event Action Lost;
-        /// <summary>Fired when the opponent seat changes (a player left before the start and a bot took over).</summary>
+        /// <summary>Fired when a seat changes (a player left before the start and a bot took over).</summary>
         public event Action PlayersChanged;
 
         public abstract bool IsOnline { get; }
-        public int OpponentSeat => 1 - Seat;
+        /// <summary>Players at the table (2 to 10).</summary>
+        public int Size => Players != null ? Players.Length : 2;
+        /// <summary>The player after you (in a 1v1 game, your opponent).</summary>
+        public int OpponentSeat => (Seat + 1) % Size;
         public PlayerInfo Me => Players[Seat];
         public PlayerInfo Opponent => Players[OpponentSeat];
 
         public abstract void Ready();
-        public abstract void Play(int card, int color, bool uno);
+        /// <param name="target">Who a swap / targeted draw goes to at a table of 3+ (-1: the next player).</param>
+        public abstract void Play(int card, int color, bool uno, int target = -1);
         public abstract void Draw();
         public abstract void Pass();
         public abstract void Roulette(int color);
@@ -63,13 +67,18 @@ namespace UnoGame.Net
     {
         public static string Simple(string t) => "{\"t\":\"" + t + "\"}";
 
-        public static string Play(int card, int color, bool uno) =>
-            "{\"t\":\"play\",\"card\":" + card + ",\"color\":" + color + ",\"uno\":" + (uno ? "true" : "false") + "}";
+        public static string Play(int card, int color, bool uno, int target = -1) =>
+            "{\"t\":\"play\",\"card\":" + card + ",\"color\":" + color + ",\"uno\":" + (uno ? "true" : "false") +
+            (target >= 0 ? ",\"target\":" + target : "") + "}";
 
         public static string Emote(int e) => "{\"t\":\"emote\",\"e\":" + e + "}";
 
-        /// <summary>Search for a match in a game mode; lvl is the bot difficulty to use if no real player turns up.</summary>
-        public static string Find(int level, string mode) => "{\"t\":\"find\",\"lvl\":" + level + ",\"mode\":\"" + mode + "\"}";
+        /// <summary>
+        /// Search for a table of size players in a game mode; lvl is the bot difficulty for the seats that
+        /// no real player fills.
+        /// </summary>
+        public static string Find(int level, string mode, int size) =>
+            "{\"t\":\"find\",\"lvl\":" + level + ",\"mode\":\"" + mode + "\",\"size\":" + size + "}";
 
         public static string Roulette(int color) => "{\"t\":\"roulette\",\"color\":" + color + "}";
 
@@ -122,7 +131,7 @@ namespace UnoGame.Net
         }
 
         public override void Ready() => owner.Send(Wire.Simple("ready"));
-        public override void Play(int card, int color, bool uno) => owner.Send(Wire.Play(card, color, uno));
+        public override void Play(int card, int color, bool uno, int target = -1) => owner.Send(Wire.Play(card, color, uno, target));
         public override void Draw() => owner.Send(Wire.Simple("draw"));
         public override void Pass() => owner.Send(Wire.Simple("pass"));
         public override void Roulette(int color) => owner.Send(Wire.Roulette(color));

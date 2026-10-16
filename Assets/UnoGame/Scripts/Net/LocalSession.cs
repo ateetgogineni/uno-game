@@ -5,12 +5,12 @@ using UnityEngine;
 namespace UnoGame.Net
 {
     /// <summary>
-    /// Offline match against a bot, used when the server is unreachable. Runs the C# port of the server
-    /// engine and produces exactly the messages the server would send (see Server/src/match.js).
+    /// Offline match against 1 to 9 bots, used when the server is unreachable. Runs the C# port of the
+    /// server engine and produces exactly the messages the server would send (see Server/src/match.js).
     /// </summary>
     public sealed class LocalSession : GameSession
     {
-        const int MeSeat = 0, BotSeat = 1;
+        const int MeSeat = 0;
 
         readonly GameConfig cfg;
         UnoEngine game;
@@ -20,16 +20,26 @@ namespace UnoGame.Net
         float turnLen;
         int timeouts;
         readonly int botLevel;
-        readonly List<(float at, int emote)> botEmotes = new List<(float, int)>();
+        readonly List<(float at, int seat, int emote)> botEmotes = new List<(float, int, int)>();
 
-        public LocalSession(GameConfig cfg, PlayerInfo me, PlayerInfo bot, int level, string mode)
+        /// <param name="players">You first, then the bots.</param>
+        public LocalSession(GameConfig cfg, PlayerInfo[] players, int level, string mode)
         {
             this.cfg = cfg;
             Mode = Decks.Normalize(mode);
             botLevel = UnoBot.ClampLevel(level);
             MatchId = "local";
             Seat = MeSeat;
-            Players = new[] { me, bot };
+            Players = players;
+        }
+
+        bool IsBot(int seat) => seat != MeSeat;
+
+        int RandomBot()
+        {
+            var live = new List<int>();
+            for (int i = 0; i < Size; i++) if (IsBot(i) && (game == null || !game.Out[i])) live.Add(i);
+            return live.Count > 0 ? live[Random.Range(0, live.Count)] : -1;
         }
 
         public override bool IsOnline => false;
@@ -38,7 +48,7 @@ namespace UnoGame.Net
         {
             if (started) return;
             started = true;
-            game = new UnoEngine(2, Random.Range(1, int.MaxValue), cfg.stacking, Mode);
+            game = new UnoEngine(Size, Random.Range(1, int.MaxValue), cfg.stacking, Mode);
             game.Start();
             Flush();
         }
@@ -58,7 +68,8 @@ namespace UnoGame.Net
                 else if (ev.k == "roulette") ms += 400 + 200 * ev.n;
                 else if (ev.k == "discardAll") ms += 250 * ev.n;
                 else if (ev.k == "flip") ms += 1000;
-                else if (ev.k == "swap") ms += 900;
+                else if (ev.k == "swap" || ev.k == "rotate") ms += 900;
+                else if (ev.k == "out") ms += 700;
                 else if (ev.k == "dare" || ev.k == "darePending" || ev.k == "roulettePending") ms += 400;
             }
             return ms / 1000f;
@@ -73,7 +84,9 @@ namespace UnoGame.Net
             {
                 turnLen = cfg.turnSeconds;
                 deadline = Now + anim + turnLen;
-                if (game.Turn == BotSeat) botActAt = Now + anim + Random.Range(0.9f, 1.8f);
+                // Big tables move a bit quicker so the wait for your next turn stays short.
+                float pace = Size > 4 ? 0.75f : 1f;
+                if (IsBot(game.Turn)) botActAt = Now + anim + Random.Range(0.9f, 1.8f) * pace;
             }
             var st = game.View(MeSeat);
             st.ms = game.Over ? 0 : Mathf.RoundToInt((deadline - Now) * 1000);
@@ -82,16 +95,22 @@ namespace UnoGame.Net
             BotReactions(events);
         }
 
+        // Bots occasionally react with an emote, like a person would.
         void BotReactions(List<Ev> events)
         {
-            int e = -1;
-            foreach (var ev in events)
+            for (int b = 0; b < Size; b++)
             {
-                if (ev.k == "win") e = ev.p == BotSeat ? (Random.value < 0.5f ? Emotes.Happy : Emotes.Cool) : Emotes.Sad;
-                else if (ev.k == "stack" && game.Turn != BotSeat) e = Emotes.Laugh;
-                else if (ev.k == "draw" && ev.p == BotSeat && ev.n >= 4) e = Random.value < 0.5f ? Emotes.Angry : Emotes.Wow;
+                if (!IsBot(b)) continue;
+                int e = -1;
+                foreach (var ev in events)
+                {
+                    if (ev.k == "win") e = ev.p == b ? (Random.value < 0.5f ? Emotes.Happy : Emotes.Cool) : Emotes.Sad;
+                    else if (ev.k == "stack" && game.Turn != b) e = Emotes.Laugh;
+                    else if (ev.k == "draw" && ev.p == b && ev.n >= 4) e = Random.value < 0.5f ? Emotes.Angry : Emotes.Wow;
+                }
+                // fewer reactions per bot at a big table, so it doesn't turn into a wall of emotes
+                if (e >= 0 && Random.value < 0.35f * Mathf.Min(1f, 3f / Size)) botEmotes.Add((Now + Random.Range(0.7f, 1.3f), b, e));
             }
-            if (e >= 0 && Random.value < 0.35f) botEmotes.Add((Now + Random.Range(0.7f, 1.3f), e));
         }
 
         public override void Tick()
@@ -99,11 +118,11 @@ namespace UnoGame.Net
             for (int i = botEmotes.Count - 1; i >= 0; i--)
             {
                 if (Now < botEmotes[i].at) continue;
-                Deliver(new ServerMsg { t = "emote", p = BotSeat, e = botEmotes[i].emote });
+                Deliver(new ServerMsg { t = "emote", p = botEmotes[i].seat, e = botEmotes[i].emote });
                 botEmotes.RemoveAt(i);
             }
             if (!started || game.Over) return;
-            if (game.Turn == BotSeat)
+            if (IsBot(game.Turn))
             {
                 if (botActAt > 0 && Now >= botActAt) BotAct();
                 return;
@@ -120,8 +139,9 @@ namespace UnoGame.Net
         void BotAct()
         {
             botActAt = -1;
-            var err = UnoBot.Apply(game, BotSeat, UnoBot.Choose(game, BotSeat, botLevel));
-            if (err != null) game.AutoMove(BotSeat);
+            int p = game.Turn;
+            var err = UnoBot.Apply(game, p, UnoBot.Choose(game, p, botLevel));
+            if (err != null) game.AutoMove(p);
             Flush();
         }
 
@@ -137,12 +157,14 @@ namespace UnoGame.Net
             Flush();
         }
 
-        public override void Play(int card, int color, bool uno)
+        public override void Play(int card, int color, bool uno, int target = -1)
         {
             if (!started || game.Over) return;
-            // Forgot UNO? The bot only catches it some of the time (official rule: no catch, no penalty).
-            bool forgive = !uno && Random.value >= UnoBot.CatchChance[botLevel];
-            Act(game.Play(MeSeat, card, color, uno, forgive));
+            // Forgot UNO? Each bot only notices some of the time (official rule: no catch, no penalty).
+            bool forgive = !uno;
+            for (int i = 0; i < Size && forgive; i++)
+                if (IsBot(i) && !game.Out[i] && Random.value < UnoBot.CatchChance[botLevel]) forgive = false;
+            Act(game.Play(MeSeat, card, color, uno, forgive, target));
         }
 
         public override void Draw()
@@ -171,11 +193,12 @@ namespace UnoGame.Net
 
         public override void Emote(int e)
         {
-            // The bot sometimes answers.
-            if (Random.value < 0.4f)
+            // A bot sometimes answers.
+            int b = RandomBot();
+            if (b >= 0 && Random.value < 0.4f)
             {
                 int[] replies = { Emotes.Happy, Emotes.Laugh, Emotes.Cool, Emotes.Wow };
-                botEmotes.Add((Now + Random.Range(1.0f, 1.8f), replies[Random.Range(0, replies.Length)]));
+                botEmotes.Add((Now + Random.Range(1.0f, 1.8f), b, replies[Random.Range(0, replies.Length)]));
             }
         }
 
