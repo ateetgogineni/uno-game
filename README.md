@@ -40,11 +40,12 @@ Mode rules live in `Server/src/cards.js` (MODES) and `Assets/UnoGame/Scripts/Cor
 
 | Path | What it is |
 |---|---|
-| `Assets/UnoGame/Scripts` | Game code: `Core` (decks, rules engine, bot), `Net` (WebSocket client, matchmaker, online/offline sessions), `Game` (table, animations, dares), `Home` (home, mode rules, matchmaking), `Dev` (autopilot tests, layout audit, video capture) |
+| `Assets/UnoGame/Scripts` | Game code: `Core` (decks, rules engine, bot), `Net` (Photon link, table host, WebSocket client, matchmaker, sessions), `Game` (table, animations, dares), `Home` (home, mode rules, matchmaking), `Dev` (autopilot tests, layout audit, video capture) |
 | `Assets/UnoGame/Scripts/App/ModeInfo.cs` | Mode list, taglines and the rules shown before matchmaking |
 | `Assets/UnoGame/Editor` | `Pipeline` (settings, builds), `ArtImporter`, `SceneBuilder` (scenes, card prefab, matchmaking Animator), `Checks` |
 | `Assets/UnoGame/Resources/GameConfig.asset` | Server address, timeouts, turn length |
-| `Server/` | Node matchmaking + game server (no dependencies), tests, Dockerfile |
+| `Server/` | Optional Node matchmaking + game server (no dependencies), tests, Dockerfile |
+| `Assets/Photon` | Photon Realtime Unity SDK v5.1.20 (client library + Realtime) |
 | `Tools/art/generate.js` | Draws all production art (155 cards, UI, avatars) as SVG and renders the atlases with headless Edge |
 | `Keystore/` | Android upload key (**git-ignored, back it up**) |
 
@@ -58,17 +59,26 @@ Unity -batchmode -quit -projectPath . -buildTarget Android -executeMethod UnoGam
 Outputs `Builds/Android/UNO Game-<version>.apk` (install directly) and `.aab` (Google Play), signed with
 `Keystore/unogame-upload.keystore`. Bump `Version`/`VersionCode` in `Pipeline.cs` for each release.
 
-## Server
+## Online play (Photon Cloud, no server to host)
+
+Online games go through Photon Realtime (`Assets/Photon`, SDK v5.1.20; App ID and region in
+`GameConfig.asset`). Pressing Play joins or opens a Photon room for the same mode and table size; after
+a few seconds the room's master client fills the empty seats with bots and runs the table on that phone
+(`Net/TableHost.cs`, a port of the server's match logic, so the game screen can't tell the difference).
+Each player only receives their own hand. The host shares a game snapshot after every move, so if it
+leaves, the next phone takes over the same game. Only players on the same app version meet. No network
+or no Photon: the game falls back to an offline bot game.
+
+## Server (optional)
 
 ```
 cd Server && npm test                       # rules for every mode, bot games, real WebSocket matches
 docker compose -f Server/docker-compose.yml up -d --build
 ```
 
-Players are matched only within the same mode and table size; bots fill the empty seats after a few
-seconds. The app connects to `serverUrl` in `GameConfig.asset`
-(currently `ws://192.168.29.30:8090/`, home network only). For players anywhere, host the server at a
-public `wss://` address and update that field.
+Set `network` to Server in `GameConfig.asset` (or start the app with `-server ws://host:port/`) to use
+the Node server instead of Photon. Players are matched only within the same mode and table size; bots
+fill the empty seats after a few seconds. The server is authoritative (no phone sees other hands).
 
 ## Testing
 

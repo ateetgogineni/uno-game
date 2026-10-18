@@ -20,8 +20,8 @@ namespace UnoGame.EditorTools
     {
         public const string Product = "UNO Game";
         public const string PackageId = "com.unogame.game";
-        public const string Version = "1.2.0";
-        public const int VersionCode = 5;
+        public const string Version = "1.3.0";
+        public const int VersionCode = 6;
 
         const string FontTtf = "Assets/UnoGame/Fonts/Inter-SemiBold.ttf";
         const string FontAsset = "Assets/UnoGame/Resources/Fonts/Inter SDF.asset";
@@ -236,6 +236,26 @@ namespace UnoGame.EditorTools
             });
             EditorUserBuildSettings.buildAppBundle = false;
             Finish(aab, "Android AAB");
+        }
+
+        /// <summary>A smaller 64-bit-only APK for sharing directly (every current phone is ARM64).</summary>
+        [MenuItem("UNO Game/Build Android APK (ARM64 only)")]
+        public static void BuildAndroidArm64()
+        {
+            ApplyPlayerSettings();
+            ApplySigning();
+            Directory.CreateDirectory("Builds/Android");
+            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+            EditorUserBuildSettings.buildAppBundle = false;
+            var apk = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = Scenes,
+                locationPathName = $"Builds/Android/{Product}-{Version}-arm64.apk",
+                target = BuildTarget.Android,
+                options = BuildOptions.None,
+            });
+            ApplyPlayerSettings();   // back to ARM64 + ARMv7 for the store builds
+            Finish(apk, "Android APK (ARM64)");
         }
 
         /// <summary>
