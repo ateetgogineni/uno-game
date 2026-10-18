@@ -87,9 +87,12 @@ class Match {
 
   // Rough time the clients need to animate these events, so bots don't act before the cards land.
   animMs(events) {
+    // dealing: one card each per round, a little faster per card at big tables (as the clients deal)
+    const n = this.seats.length;
+    const deal = Math.min(1, (2 + 0.24 * (n - 2)) / n);
     let ms = 0;
     for (const ev of events) {
-      if (ev.k === 'deal') ms += 160 * ev.n;
+      if (ev.k === 'deal') ms += 160 * ev.n * deal;
       else if (ev.k === 'draw' || ev.k === 'unoPen') ms += 220 * Math.max(1, ev.n);
       else if (ev.k === 'play') ms += 450;
       else if (ev.k === 'reshuffle') ms += 600;
