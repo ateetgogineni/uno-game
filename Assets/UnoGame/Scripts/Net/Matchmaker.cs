@@ -5,7 +5,8 @@ using UnityEngine;
 namespace UnoGame.Net
 {
     /// <summary>
-    /// Owns the server connection and finds matches. Search flow:
+    /// Finds matches. Online play goes through Photon Cloud (PhotonLink: one phone runs each table) or,
+    /// if GameConfig.network is Server, through the Node server in Server/. Server search flow:
     ///   connect (if needed) -> "find" -> server seats the players waiting for the same mode and table
     ///   size, and fills the empty seats with bots after a few seconds.
     ///   If the server cannot be reached (or does not answer in time) a local bot match is made instead,
@@ -17,11 +18,14 @@ namespace UnoGame.Net
 
         public Phase Current { get; private set; } = Phase.Idle;
         public GameSession Session { get; private set; }
-        public int OnlineCount { get; private set; } = -1;
-        public bool ServerOnline => net.IsOpen && welcomed;
+        public int OnlineCount => UsePhoton ? photon.OnlineCount : onlineCount;
+        public bool ServerOnline => UsePhoton ? photon.Ready : net.IsOpen && welcomed;
         public bool SearchingOnline { get; private set; }
         /// <summary>True until the first connection attempt has finished (home shows "Connecting...").</summary>
-        public bool Connecting => connecting || (!attempted && !cfg.forceOffline);
+        public bool Connecting => UsePhoton ? photon.Connecting : connecting || (!attempted && !cfg.forceOffline);
+        int onlineCount = -1;
+        PhotonLink photon;
+        bool UsePhoton => photon != null && !cfg.forceOffline;
         bool attempted;
 
         public event Action<GameSession> Matched;
@@ -46,6 +50,11 @@ namespace UnoGame.Net
             profile = prof;
             net.Message += OnNetMessage;
             net.Closed += OnNetClosed;
+            if (cfg.network == GameConfig.Network.Photon)
+            {
+                photon = gameObject.AddComponent<PhotonLink>();
+                photon.Init(cfg, profile, this);
+            }
         }
 
         float Now => Time.unscaledTime;
@@ -55,6 +64,7 @@ namespace UnoGame.Net
         /// <summary>Connect in the background so the home screen can show who is online.</summary>
         public void Probe()
         {
+            if (UsePhoton) { photon.Connect(); return; }
             if (cfg.forceOffline || net.IsOpen || connecting) return;
             Connect(null, null);
         }
@@ -95,6 +105,14 @@ namespace UnoGame.Net
             onlineDeadline = -1;
             SearchingOnline = false;
             if (cfg.forceOffline) { ScheduleLocal(); return; }
+            if (UsePhoton)
+            {
+                SearchingOnline = true;
+                onlineDeadline = Now + cfg.onlineMatchTimeoutSec + cfg.botAfterSec;
+                photon.Find(SearchMode, SearchSize);
+                StatusChanged?.Invoke();
+                return;
+            }
             if (ServerOnline) { SendFind(); return; }
             Connect(ok =>
             {
@@ -124,7 +142,8 @@ namespace UnoGame.Net
         public void CancelSearch()
         {
             if (Current != Phase.Searching) return;
-            if (SearchingOnline && net.IsOpen) net.Send(Wire.Simple("cancel"));
+            if (SearchingOnline && UsePhoton) photon.Cancel();
+            else if (SearchingOnline && net.IsOpen) net.Send(Wire.Simple("cancel"));
             SearchingOnline = false;
             localMatchAt = -1;
             onlineDeadline = -1;
@@ -170,7 +189,7 @@ namespace UnoGame.Net
             {
                 case "welcome":
                     welcomed = true;
-                    OnlineCount = m.online;
+                    onlineCount = m.online;
                     if (Session is OnlineSession os && reconnectAt >= 0)
                     {
                         reconnectAt = -1;
@@ -181,7 +200,7 @@ namespace UnoGame.Net
                     break;
                 case "queued":
                 case "pong":
-                    OnlineCount = m.online;
+                    onlineCount = m.online;
                     StatusChanged?.Invoke();
                     break;
                 case "matched":
@@ -219,8 +238,9 @@ namespace UnoGame.Net
                 if (localMatchAt > 0 && now >= localMatchAt) CompleteMatch(MakeLocal());
                 else if (SearchingOnline && onlineDeadline > 0 && now >= onlineDeadline)
                 {
-                    Debug.Log("[Match] server did not match in time, playing offline");
-                    if (net.IsOpen) net.Send(Wire.Simple("cancel"));
+                    Debug.Log("[Match] no online match in time, playing offline");
+                    if (UsePhoton) photon.Cancel();
+                    else if (net.IsOpen) net.Send(Wire.Simple("cancel"));
                     ScheduleLocal();
                 }
             }
@@ -237,6 +257,7 @@ namespace UnoGame.Net
                 }
             }
 
+            if (UsePhoton) return;
             if (net.IsOpen && now >= nextPing)
             {
                 nextPing = now + 20f;
@@ -248,6 +269,21 @@ namespace UnoGame.Net
                 Probe();
             }
         }
+
+        // ---------------------------------------------------------------- Photon
+
+        internal void PhotonMatched(GameSession s)
+        {
+            if (Current == Phase.Searching && SearchingOnline) CompleteMatch(s);
+            else { s.Leave(); s.Dispose(); }
+        }
+
+        internal void PhotonSearchFailed()
+        {
+            if (Current == Phase.Searching && SearchingOnline) ScheduleLocal();
+        }
+
+        internal void PhotonStatusChanged() => StatusChanged?.Invoke();
 
         LocalSession MakeLocal()
         {
