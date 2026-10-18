@@ -87,6 +87,8 @@ namespace UnoGame.Game
             oppPanel.gameObject.SetActive(false);
             oppHand.gameObject.SetActive(false);
             if (landscape) ApplyLandscape();
+            // the UNO Attack launcher is wider than the deck: keep it clear of the side seats
+            else launcherImg.rectTransform.localScale = Vector3.one * 0.85f;
 
             var root = (RectTransform)transform;
             seatLayer = UIKit.Node("Seats", root).Fill();
@@ -243,9 +245,9 @@ namespace UnoGame.Game
                 }
                 else
                 {
-                    pos[0] = new Vector2(-402, 260);
+                    pos[0] = new Vector2(-410, 260);
                     pos[1] = new Vector2(0, top - 300);
-                    pos[2] = new Vector2(402, 260);
+                    pos[2] = new Vector2(410, 260);
                 }
             }
             else
