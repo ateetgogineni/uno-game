@@ -52,6 +52,47 @@ namespace UnoGame.EditorTools
             Directory.CreateDirectory("Logs");
             File.WriteAllText("Logs/parity-cs.txt", sb.ToString());
             Debug.Log("[Checks] wrote Logs/parity-cs.txt");
+            SnapshotRoundTrip();
+        }
+
+        /// <summary>
+        /// Host handover: a game saved part way (through JSON, as it travels between phones) and restored
+        /// must play on exactly like the original.
+        /// </summary>
+        [MenuItem("UNO Game/Checks/Snapshot round trip")]
+        public static void SnapshotRoundTrip()
+        {
+            int same = 0, total = 0;
+            for (int seed = 1; seed <= 300; seed++)
+            {
+                string mode = Decks.ModeIds[seed % Decks.ModeIds.Length];
+                int players = 2 + seed % 9;
+                var a = new UnoEngine(players, seed, true, mode);
+                a.Start();
+                int cut = 5 + seed % 60;
+                for (int i = 0; i < cut && !a.Over; i++) UnoBot.Apply(a, a.Turn, UnoBot.Choose(a, a.Turn, seed % 3));
+                if (a.Over) continue;
+                a.TakeEvents();
+                var b = UnoEngine.Restore(JsonUtility.FromJson<EngineSnapshot>(JsonUtility.ToJson(a.Snapshot())));
+                string ra = Finish(a, seed % 3), rb = Finish(b, seed % 3);
+                total++;
+                if (ra == rb) same++;
+                else Debug.LogError($"[Checks] snapshot diverged: seed {seed} {mode} {players}p\n{ra}\n{rb}");
+            }
+            Debug.Log($"[Checks] snapshot round trip: {same}/{total} games identical after restore");
+        }
+
+        static string Finish(UnoEngine g, int level)
+        {
+            var sb = new StringBuilder();
+            for (int guard = 0; !g.Over && guard < 5000; guard++)
+            {
+                int p = g.Turn;
+                var m = UnoBot.Choose(g, p, level);
+                if (UnoBot.Apply(g, p, m) != null) { sb.Append("ERR"); break; }
+                sb.Append(p).Append(m.Type.ToString()[0]).Append(m.Card).Append(' ');
+            }
+            return $"w{g.Winner} pts{g.Points} {sb}";
         }
     }
 }

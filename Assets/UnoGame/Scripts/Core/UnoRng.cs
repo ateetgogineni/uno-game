@@ -22,5 +22,8 @@ namespace UnoGame.Core
         }
 
         public int Range(int n) => (int)System.Math.Floor(Next() * n);
+
+        /// <summary>Internal state, so a saved game continues with exactly the same draws.</summary>
+        public uint State { get => a; set => a = value; }
     }
 }

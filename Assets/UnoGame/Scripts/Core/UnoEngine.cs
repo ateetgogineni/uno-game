@@ -6,7 +6,7 @@ namespace UnoGame.Core
     /// UNO rules engine for every game mode, a line-by-line port of Server/src/engine.js (the online
     /// authority). Used for offline games against a bot. Keep both in sync: Checks.ParityDump compares them.
     /// </summary>
-    public sealed class UnoEngine
+    public sealed partial class UnoEngine
     {
         public const int MaxMoves = 1000;
 
