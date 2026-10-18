@@ -18,6 +18,7 @@ namespace UnoGame.Dev
     ///   -keepopen             do not quit at the end
     ///   -modes a,b,c|all      game modes to play in turn (default classic)
     ///   -players 2,5,10       table sizes to play in turn (default 2)
+    ///   -leaveafter N         leave each game after N of your own turns (tests players and hosts leaving)
     /// </summary>
     public sealed class AutoPilot : MonoBehaviour
     {
@@ -49,6 +50,7 @@ namespace UnoGame.Dev
         float dareSince = -1;
         float targetSince = -1;
         int[] sizes = { 2 };
+        int leaveAfter = -1;
 
         string CurrentMode => modes[played % modes.Length];
         int CurrentSize => sizes[played % sizes.Length];
@@ -71,6 +73,7 @@ namespace UnoGame.Dev
                 if (args[i] == "-supersize" && next != null) ap.superSize = Mathf.Clamp(int.Parse(next), 1, 4);
                 if (args[i] == "-modes" && next != null) ap.modes = next == "all" ? Decks.ModeIds : next.Split(',');
                 if (args[i] == "-players" && next != null) ap.sizes = Array.ConvertAll(next.Split(','), int.Parse);
+                if (args[i] == "-leaveafter" && next != null) ap.leaveAfter = int.Parse(next);
             }
             if (ap.shotsDir != null) Directory.CreateDirectory(ap.shotsDir);
             if (ap.captureDir != null)
@@ -251,6 +254,14 @@ namespace UnoGame.Dev
             if (Now < thinkUntil) return;
             thinkUntil = -1;
             turns++;
+            if (leaveAfter > 0 && turns > leaveAfter)
+            {
+                Debug.Log("[AUTO] leaving the game on purpose after " + leaveAfter + " turns");
+                played++;
+                turns = 0;
+                gc.GoHome();
+                return;
+            }
             if (turns == 2)
             {
                 Shot("05_my_turn");
